@@ -1,4 +1,6 @@
 import datetime, sys, time, random, more_itertools, requests_html_playwright, json, gzip
+import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from pathlib import Path
 from Bio import SeqIO
@@ -6,7 +8,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from playwright.sync_api import sync_playwright
 from playwright._impl._errors import TimeoutError
-from io import BytesIO
 
 
 # function to read the fasta file to identify into a dictionary
@@ -203,15 +204,122 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
     return results_urls
 
 
+def download_and_parse(
+    download_url: list, hdf_name_results: str, html_session: object
+) -> None:
+    """This function downloads and parses the JSON from the result urls and stores it in the hdf storage
+
+    Args:
+        download_urls (list): URL to download the JSON result
+        hdf_name_results_str (str): Name of the hdf storage to write to.
+        html_session (object): session object to perform the download.
+    """
+    response = html_session.get(download_url)
+    response = gzip.decompress(response.content)
+    content_str = response.decode("utf-8")
+
+    # store the output dataframe here
+    output_dataframe = pd.DataFrame()
+
+    for json_record in content_str.splitlines():
+        # save the results here
+        json_record_results = []
+
+        json_record = json.loads(json_record)
+        # extract the sequence id first
+        sequence_id = json_record["seqid"]
+
+        # extract the results for this seq id
+        results = json_record.get("results")
+
+        # add code for empty results here
+        sys.exit()
+
+        # the keys of the results are the process id|primer|bin_uri|x|x
+        for key in results.keys():
+            process_id, bin_uri = key.split("|")[0], key.split("|")[2]
+            pident = results[key].get("pident", np.nan)
+            # extract the taxonomy
+            taxonomy = results.get(key).get("taxonomy", {})
+            taxonomy = [
+                taxonomy.get(taxonomic_level)
+                for taxonomic_level in [
+                    "phylum",
+                    "class",
+                    "order",
+                    "family",
+                    "genus",
+                    "species",
+                ]
+            ]
+
+            json_record_results.append(taxonomy + [pident] + [process_id] + [bin_uri])
+
+        # transform the record to dataframe to add it to the hdf storage
+        json_record_results = pd.DataFrame(
+            data=json_record_results,
+            columns=[
+                "Phylum",
+                "Class",
+                "Order",
+                "Family",
+                "Genus",
+                "Species",
+                "pct_identity",
+                "process_id",
+                "bin_uri",
+            ],
+        )
+
+        # add the sequence id and the timestamp
+        json_record_results.insert(0, column="id", value=sequence_id)
+        json_record_results["request_date"] = pd.Timestamp.now().strftime("%Y-%m-%d %X")
+        json_record_results["pct_identity"] = json_record_results[
+            "pct_identity"
+        ].astype("float64")
+
+        # fill emtpy values with strings to make compatible with hdf
+        json_record_results.fillna("")
+
+        # append to the output dataframe
+        output_dataframe = pd.concat([output_dataframe, json_record_results], axis=0)
+
+    # add the results to the hdf storage
+    # set size limits for the columns
+    item_sizes = {
+        "id": 100,
+        "Phylum": 80,
+        "Class": 80,
+        "Order": 80,
+        "Family": 80,
+        "Genus": 80,
+        "Species": 80,
+        "process_id": 25,
+        "bin_uri": 25,
+        "request_date": 30,
+    }
+
+    with pd.HDFStore(
+        hdf_name_results, mode="a", complib="blosc:blosclz", complevel=9
+    ) as hdf_output:
+        hdf_output.append(
+            key="results_unsorted",
+            value=output_dataframe,
+            format="t",
+            data_columns=True,
+            min_itemsize=item_sizes,
+            complib="blosc:blosclz",
+            complevel=9,
+        )
+
+
 # function to download the results as json
-def download_json(results_urls: list) -> list:
+def download_json(results_urls: list, hdf_name_results: str):
     """Function to download the JSON Results from the BOLD id engine download URLs
 
     Args:
         results_urls (list): List of download urls.
-
-    Returns:
-        list: List of download urls for the JSON results.
+        hdf_name_results (str): Name of the hdf storage to write to.
     """
     # start a headless playwright session to render the javascript
     # no async code needed since waiting for the rendering is required anyways
@@ -219,53 +327,40 @@ def download_json(results_urls: list) -> list:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        download_urls = []
-
         # define variables for user output
         total_downloads = len(results_urls)
         counter = 1
 
         # loop over all results urls
-        with tqdm(
-            total=len(results_urls), desc="Collecting JSON download links"
-        ) as pbar:
-            while results_urls:
-                # select a random resultpage
-                url = random.choice(results_urls)
-                # open it with the browser to check if results are visible
-                page.goto(url)
-                try:
-                    page.wait_for_selector("#jsonlResults", timeout=20000)
-                    download_url = page.query_selector("#jsonlResults").get_attribute(
-                        "href"
-                    )
-                    download_urls.append(download_url)
-                    results_urls.remove(url)
-                    pbar.update(1)
-                    # user output
-                    tqdm.write(
-                        "{}: Result {} of {} collected.".format(
-                            datetime.datetime.now().strftime("%H:%M:%S"),
-                            counter,
-                            total_downloads,
-                            float(counter / total_downloads),
+        with tqdm(total=len(results_urls), desc="Downloading JSON data") as pbar:
+            with requests_html_playwright.HTMLSession() as session:
+                while results_urls:
+                    # select a random resultpage
+                    url = random.choice(results_urls)
+                    # open it with the browser to check if results are visible
+                    page.goto(url)
+                    try:
+                        page.wait_for_selector("#jsonlResults", timeout=20000)
+                        download_url = page.query_selector(
+                            "#jsonlResults"
+                        ).get_attribute("href")
+                        # parsing and download function here
+                        download_and_parse(download_url, hdf_name_results, session)
+
+                        results_urls.remove(url)
+                        pbar.update(1)
+                        # user output
+                        tqdm.write(
+                            "{}: Result {} of {} collected.".format(
+                                datetime.datetime.now().strftime("%H:%M:%S"),
+                                counter,
+                                total_downloads,
+                                float(counter / total_downloads),
+                            )
                         )
-                    )
-                    counter += 1
-                except TimeoutError:
-                    continue
-
-    return download_urls
-
-
-def download_and_parse(download_urls: list, hdf_name_results: str) -> None:
-    """This function downloads and parses the JSON from the result urls and stores it in the hdf storage
-
-    Args:
-        download_urls (list): List of urls to JSON download links.
-        hdf_name_results_str (_type_): Name of the hdf storage to write to.
-    """
-    pass
+                        counter += 1
+                    except TimeoutError:
+                        continue
 
 
 def main(fasta_path: str, database: int, operating_mode: int) -> None:
@@ -308,19 +403,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     )
 
     # collect links to download the json reports
-    download_urls = download_json(results_urls)
-
-    # download and parse the data to hdf storage
+    download_json(results_urls, hdf_name_results)
 
 
-# main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta", 1, 2)
-with requests_html_playwright.HTMLSession() as session:
-    r = session.get(
-        "https://us-east-1.linodeobjects.com/blastnode-idengine-output/submitted.db_public.bin-tax-derep~mi_0.94~mo_100~maxh_25~order_3-660f3c7fda89423ebfd4101aa4ff5a50.jsonl.gz?AWSAccessKeyId=TCUH3DQWRDLV575HRQO2&Signature=JsbjwLWUY7vRONi9SwWw%2Bz7pf8o%3D&Expires=1729780831",
-    )
-    r = gzip.decompress(r.content)
-    content_str = r.decode("utf-8")
-
-    for line in content_str.splitlines():
-        record = json.loads(line)
-        print(record)
+main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_5000.fasta", 1, 1)
