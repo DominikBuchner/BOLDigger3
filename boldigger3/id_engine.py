@@ -1,9 +1,12 @@
-import datetime, sys, time, random, more_itertools, requests_html_playwright, json
+import datetime, sys, time, random, more_itertools, requests_html_playwright, json, gzip
 from tqdm import tqdm
 from pathlib import Path
 from Bio import SeqIO
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from playwright.sync_api import sync_playwright
+from playwright._impl._errors import TimeoutError
+from io import BytesIO
 
 
 # function to read the fasta file to identify into a dictionary
@@ -200,6 +203,71 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
     return results_urls
 
 
+# function to download the results as json
+def download_json(results_urls: list) -> list:
+    """Function to download the JSON Results from the BOLD id engine download URLs
+
+    Args:
+        results_urls (list): List of download urls.
+
+    Returns:
+        list: List of download urls for the JSON results.
+    """
+    # start a headless playwright session to render the javascript
+    # no async code needed since waiting for the rendering is required anyways
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        download_urls = []
+
+        # define variables for user output
+        total_downloads = len(results_urls)
+        counter = 1
+
+        # loop over all results urls
+        with tqdm(
+            total=len(results_urls), desc="Collecting JSON download links"
+        ) as pbar:
+            while results_urls:
+                # select a random resultpage
+                url = random.choice(results_urls)
+                # open it with the browser to check if results are visible
+                page.goto(url)
+                try:
+                    page.wait_for_selector("#jsonlResults", timeout=20000)
+                    download_url = page.query_selector("#jsonlResults").get_attribute(
+                        "href"
+                    )
+                    download_urls.append(download_url)
+                    results_urls.remove(url)
+                    pbar.update(1)
+                    # user output
+                    tqdm.write(
+                        "{}: Result {} of {} collected.".format(
+                            datetime.datetime.now().strftime("%H:%M:%S"),
+                            counter,
+                            total_downloads,
+                            float(counter / total_downloads),
+                        )
+                    )
+                    counter += 1
+                except TimeoutError:
+                    continue
+
+    return download_urls
+
+
+def download_and_parse(download_urls: list, hdf_name_results: str) -> None:
+    """This function downloads and parses the JSON from the result urls and stores it in the hdf storage
+
+    Args:
+        download_urls (list): List of urls to JSON download links.
+        hdf_name_results_str (_type_): Name of the hdf storage to write to.
+    """
+    pass
+
+
 def main(fasta_path: str, database: int, operating_mode: int) -> None:
     """Main function to run the BOLD identification engine.
 
@@ -232,7 +300,27 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     # post requests to BOLD id engine API, collect the results urls
     results_urls = build_post_requests(fasta_dict, base_url, params)
 
+    # user output
+    tqdm.write(
+        "{}: Waiting for results to load.".format(
+            datetime.datetime.now().strftime("%H:%M:%S")
+        )
+    )
+
     # collect links to download the json reports
+    download_urls = download_json(results_urls)
+
+    # download and parse the data to hdf storage
 
 
-main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_10.fasta", 1, 1)
+# main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta", 1, 2)
+with requests_html_playwright.HTMLSession() as session:
+    r = session.get(
+        "https://us-east-1.linodeobjects.com/blastnode-idengine-output/submitted.db_public.bin-tax-derep~mi_0.94~mo_100~maxh_25~order_3-660f3c7fda89423ebfd4101aa4ff5a50.jsonl.gz?AWSAccessKeyId=TCUH3DQWRDLV575HRQO2&Signature=JsbjwLWUY7vRONi9SwWw%2Bz7pf8o%3D&Expires=1729780831",
+    )
+    r = gzip.decompress(r.content)
+    content_str = r.decode("utf-8")
+
+    for line in content_str.splitlines():
+        record = json.loads(line)
+        print(record)
