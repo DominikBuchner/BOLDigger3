@@ -78,6 +78,34 @@ def parse_fasta(fasta_path: str) -> tuple:
         sys.exit()
 
 
+# function to check is some of the sequences have already been downloaded
+def already_downloaded(fasta_dict: dict, hdf_name_results: str) -> dict:
+    """Funtion to check if any of the sequences have already been downloaded.
+
+    Args:
+        fasta_dict (dict): The dictionary with the fasta data.
+        hdf_name_results (str): The savename of the hdf data storage.
+
+    Returns:
+        dict: The dictionary with the fasta data with already downloaded sequences removed.
+    """
+    # try to open the hdf file
+    try:
+        # only collect the ids from the hdf
+        idx = pd.read_hdf(hdf_name_results, key="results_unsorted")["id"]
+
+        # remove those ids from the fasta dict
+        fasta_dict = {
+            id: seq for (id, seq) in fasta_dict.items() if id not in idx.unique()
+        }
+
+        # return the updated fasta dict
+        return fasta_dict
+    except FileNotFoundError:
+        # return the fasta dict unchanged
+        return fasta_dict
+
+
 # function to build the base urls and params
 def build_url_params(database: int, operating_mode: int) -> tuple:
     """Function that generates a base URL and the params for the POST request to the ID engine.
@@ -174,15 +202,6 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 # generate the files to send via the id engine
                 files = {"file": ("submitted.fas", data, "text/plain")}
 
-                base_url = "https://id.boldsystems.org/submission?db=public.bin-tax-derep&mi=0.94&mo=100&maxh=25&order=3"
-                params = {
-                    "db": "public.bin-tax-derep",
-                    "mi": 0.94,
-                    "mo": 100,
-                    "maxh": 25,
-                    "order": 3,
-                }
-
                 # submit the post request
                 response = session.post(base_url, params=params, files=files)
 
@@ -232,28 +251,31 @@ def download_and_parse(
         # extract the results for this seq id
         results = json_record.get("results")
 
-        # add code for empty results here
-        sys.exit()
-
-        # the keys of the results are the process id|primer|bin_uri|x|x
-        for key in results.keys():
-            process_id, bin_uri = key.split("|")[0], key.split("|")[2]
-            pident = results[key].get("pident", np.nan)
-            # extract the taxonomy
-            taxonomy = results.get(key).get("taxonomy", {})
-            taxonomy = [
-                taxonomy.get(taxonomic_level)
-                for taxonomic_level in [
-                    "phylum",
-                    "class",
-                    "order",
-                    "family",
-                    "genus",
-                    "species",
+        # only parse if results are not empty
+        if results:
+            # the keys of the results are the process id|primer|bin_uri|x|x
+            for key in results.keys():
+                process_id, bin_uri = key.split("|")[0], key.split("|")[2]
+                pident = results[key].get("pident", np.nan)
+                # extract the taxonomy
+                taxonomy = results.get(key).get("taxonomy", {})
+                taxonomy = [
+                    taxonomy.get(taxonomic_level)
+                    for taxonomic_level in [
+                        "phylum",
+                        "class",
+                        "order",
+                        "family",
+                        "genus",
+                        "species",
+                    ]
                 ]
-            ]
 
-            json_record_results.append(taxonomy + [pident] + [process_id] + [bin_uri])
+                json_record_results.append(
+                    taxonomy + [pident] + [process_id] + [bin_uri]
+                )
+        else:
+            json_record_results.append(["no_match"] * 6 + [0] + [""] + [""])
 
         # transform the record to dataframe to add it to the hdf storage
         json_record_results = pd.DataFrame(
@@ -384,6 +406,9 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         "{}_result_storage.h5.lz".format(fasta_name)
     )
 
+    # function to check if any of the sequences has already been downloaded
+    fasta_dict = already_downloaded(fasta_dict, hdf_name_results)
+
     # user output
     tqdm.write(
         "{}: Generating requests.".format(datetime.datetime.now().strftime("%H:%M:%S"))
@@ -406,4 +431,4 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     download_json(results_urls, hdf_name_results)
 
 
-main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_5000.fasta", 1, 1)
+main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta", 1, 1)
