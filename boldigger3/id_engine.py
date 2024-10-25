@@ -224,7 +224,11 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
 
 
 def download_and_parse(
-    download_url: list, hdf_name_results: str, html_session: object
+    download_url: list,
+    hdf_name_results: str,
+    html_session: object,
+    database: int,
+    operating_mode: int,
 ) -> None:
     """This function downloads and parses the JSON from the result urls and stores it in the hdf storage
 
@@ -232,6 +236,8 @@ def download_and_parse(
         download_urls (list): URL to download the JSON result
         hdf_name_results_str (str): Name of the hdf storage to write to.
         html_session (object): session object to perform the download.
+        database (int): database that was queried
+        operating_mode (int): operating mode for the BOLD query
     """
     response = html_session.get(download_url)
     response = gzip.decompress(response.content)
@@ -300,6 +306,10 @@ def download_and_parse(
             "pct_identity"
         ].astype("float64")
 
+        # add the database and the operating mode
+        json_record_results["database"] = database
+        json_record_results["operating_mode"] = operating_mode
+
         # fill emtpy values with strings to make compatible with hdf
         json_record_results.fillna("")
 
@@ -319,6 +329,8 @@ def download_and_parse(
         "process_id": 25,
         "bin_uri": 25,
         "request_date": 30,
+        "database": 5,
+        "operating_mode": 5,
     }
 
     with pd.HDFStore(
@@ -336,12 +348,16 @@ def download_and_parse(
 
 
 # function to download the results as json
-def download_json(results_urls: list, hdf_name_results: str):
+def download_json(
+    results_urls: list, hdf_name_results: str, database: int, operating_mode: int
+):
     """Function to download the JSON Results from the BOLD id engine download URLs
 
     Args:
         results_urls (list): List of download urls.
         hdf_name_results (str): Name of the hdf storage to write to.
+        database (int): database that was queried
+        operating_mode (int): operating mode for the BOLD query
     """
     # start a headless playwright session to render the javascript
     # no async code needed since waiting for the rendering is required anyways
@@ -367,7 +383,13 @@ def download_json(results_urls: list, hdf_name_results: str):
                             "#jsonlResults"
                         ).get_attribute("href")
                         # parsing and download function here
-                        download_and_parse(download_url, hdf_name_results, session)
+                        download_and_parse(
+                            download_url,
+                            hdf_name_results,
+                            session,
+                            database,
+                            operating_mode,
+                        )
 
                         results_urls.remove(url)
                         pbar.update(1)
@@ -428,7 +450,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     )
 
     # collect links to download the json reports
-    download_json(results_urls, hdf_name_results)
+    download_json(results_urls, hdf_name_results, database, operating_mode)
 
 
-main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta", 1, 1)
+main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_10.fasta", 1, 3)

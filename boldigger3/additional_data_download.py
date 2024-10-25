@@ -1,6 +1,10 @@
+import asyncio, requests_html_playwright
+from requests import Response
+from tqdm.asyncio import tqdm
 import pandas as pd
-import requests
-from tqdm import tqdm
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from requests.exceptions import RetryError
 
 
 # function to collect the process ids from the hdf storage
@@ -27,6 +31,101 @@ def collect_process_ids(hdf_name_results: str) -> tuple:
     return process_ids, unique_process_ids
 
 
+# funtion to parse a record page
+def parse_record_page(html_response: object, url: str) -> list:
+    """This function parses a page for any given record on bold
+
+    Args:
+        html_response (object): Requests response object to parse
+        url (string): url as string to parse the process id
+
+    Returns:
+        list: A line of data representing the record data
+    """
+    # extract the process id from the url
+    process_id = url.split("/")[-1]
+
+    # get the status from the status code
+    status_code_to_status = {200: "public", 404: "private", 500: "unavailable"}
+    status = status_code_to_status[html_response.status_code]
+
+    # return the resulting line
+    return [process_id, status]
+
+
+# async function to perform the request
+async def as_request(url, as_session) -> list:
+    """Function to perform async requests and parse the data.
+
+    Args:
+        url (_type_): url to request
+        as_session (_type_): async session to perform the request with
+
+    Returns:
+        list: Returns the parsed response as list.
+    """
+    # request the url from BOLD
+    try:
+        response = await as_session.get(url)
+    except RetryError:
+        response = Response()
+        response.status_code = 500
+    # parse the response here
+    response = parse_record_page(response, url)
+
+    # return the response to the caller to append it to hdf
+    return response
+
+
+# function to limit concurrency of the code
+async def limit_concurrency(url, as_session, semaphore) -> object:
+    """Function to limit the concurrency of requests.
+
+    Args:
+        url (_type_): url to request.
+        as_session (_type_): session to use for the requests
+        semaphore (_type_): semaphore object
+
+    Returns:
+        function: as request with semaphore added
+    """
+    async with semaphore:
+        return await as_request(url, as_session)
+
+
+# function to launch the async session including retry strategy
+async def as_session(download_urls, semaphore) -> list:
+    """Function to launch the async session and perform the data download.
+
+    Args:
+        download_urls (_type_): All urls to download.
+        semaphore (_type_): semaphore to limit the concurrency
+
+    Returns:
+        list: returns a list of list with the gathered responses of the batch downloaded
+    """
+    # create the session with correct headers and a retry strategy
+    as_session = requests_html_playwright.AsyncHTMLSession()
+    as_session.headers.update(
+        {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.82 Safari/537.36"
+        }
+    )
+
+    # only retry if the page failed to load
+    retry_strategy = Retry(
+        total=1,
+        status_forcelist=[500],
+        backoff_factor=2,
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    as_session.mount("https://", adapter)
+
+    tasks = (limit_concurrency(url, as_session, semaphore) for url in download_urls)
+
+    return await tqdm.gather(*tasks, desc="Downloading additional data")
+
+
 # main functio to run the additional data download
 def main(hdf_name_results: str) -> None:
     """Main function to run the additional data download. Downloads additional data
@@ -44,7 +143,13 @@ def main(hdf_name_results: str) -> None:
         for idx in unique_process_ids
     ]
 
+    # test
+    semaphore = asyncio.Semaphore(25)
+    responses = asyncio.run(as_session(urls, semaphore))
+    print(responses)
+    print(len(responses))
+
 
 main(
-    "C:\\Users\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000_result_storage.h5.lz"
+    "C:\\Users\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_10_result_storage.h5.lz"
 )
