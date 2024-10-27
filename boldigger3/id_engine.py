@@ -455,7 +455,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
 
 if __name__ == "__main__":
     main(
-        "C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta",
+        "C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_10.fasta",
         3,
         3,
     )
