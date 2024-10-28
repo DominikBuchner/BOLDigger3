@@ -44,7 +44,7 @@ BOLDigger3 requires Python version 3.10 or higher and can be easily installed us
 `pip install boldigger3`
 
 This command will install BOLDigger3 along with all its dependencies.
-OLDigger3 uses the Python package ```playwright```, which needs a separate installation prior to first execution:
+BOLDigger3 uses the Python package ```playwright```, which needs a separate installation prior to first execution:
 
 `playwright install`
 
