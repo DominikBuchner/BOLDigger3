@@ -48,6 +48,14 @@ BOLDigger3 uses the Python package ```playwright```, which needs a separate inst
 
 `playwright install`
 
+**FOR BOLDigger2 USERS:**
+BOLDigger2 used requests-html which relied on an old version of pyppeteer. This may lead to conflicts with playwright. To solve:
+
+`
+pip uninstall pyppeteer
+pip install --upgrade pyee
+`
+
 To run the ```identify``` function, use the following command:
 
 `boldigger3 identify PATH_TO_FASTA --db DATABASE_NR --mode OPERATING MODE`
