@@ -74,7 +74,7 @@ The ```--mode``` is a number between 1 and the corresponding to the 3 operating 
 
 To customize the implemented thresholds for user-specific needs, the thresholds can be passed as an additional (ordered) argument. Up to five different thresholds can be passed for the different taxonomic levels (Species, Genus, Family, Order, Class). Thresholds not passed will be replaced by default, but BOLDigger3 will also inform you about this:
 
-`boldigger2 identify PATH_TO_FASTA --db DATABASE_NR --mode OPERATING MODE --thresholds 99 97`
+`boldigger3 identify PATH_TO_FASTA --db DATABASE_NR --mode OPERATING MODE --thresholds 99 97`
 
 Output:
 
@@ -83,7 +83,7 @@ Output:
 19:16:16: Species: 99, Genus: 97, Family: 90, Order: 85
 ```
 
-When a new version is released, you can update BOLDigger2 by typing:
+When a new version is released, you can update BOLDigger3 by typing:
 
 `pip install --upgrade boldigger3`
 
