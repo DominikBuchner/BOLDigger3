@@ -2,7 +2,7 @@
  
 ![boldigger_logo]()
 
-[![Downloads](https://pepy.tech/badge/boldigger2)](https://pepy.tech/project/boldigger3)
+[![Downloads](https://pepy.tech/badge/boldigger3)](https://pepy.tech/project/boldigger3)
 
 A Python program to query .fasta files against the databases of www.boldsystems.org v5!
 
