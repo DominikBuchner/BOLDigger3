@@ -1,5 +1,5 @@
 import asyncio, requests_html_playwright, more_itertools, datetime
-from id_engine import parse_fasta
+from boldigger3.id_engine import parse_fasta
 from bs4 import BeautifulSoup as BSoup
 from requests import Response
 from tqdm.asyncio import tqdm
@@ -355,7 +355,3 @@ def main(fasta_path: str) -> None:
                 batch_count,
             )
         )
-
-
-if __name__ == "__main__":
-    main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta")

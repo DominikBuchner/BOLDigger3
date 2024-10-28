@@ -379,6 +379,7 @@ def download_json(
                     page.goto(url)
                     try:
                         page.wait_for_selector("#jsonlResults", timeout=20000)
+
                         download_url = page.query_selector(
                             "#jsonlResults"
                         ).get_attribute("href")
@@ -428,34 +429,51 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         "{}_result_storage.h5.lz".format(fasta_name)
     )
 
-    # function to check if any of the sequences has already been downloaded
-    fasta_dict = already_downloaded(fasta_dict, hdf_name_results)
+    # count the total download loops
+    download_loop = 1
 
-    # user output
+    # repeat the download for failed requests
+    while fasta_dict:
+        # function to check if any of the sequences has already been downloaded
+        fasta_dict = already_downloaded(fasta_dict, hdf_name_results)
+
+        if download_loop > 1:
+            # user output
+            tqdm.write(
+                "{}: Checking for failed requests.".format(
+                    datetime.datetime.now().strftime("%H:%M:%S")
+                )
+            )
+
+        if fasta_dict:
+            # user output
+            tqdm.write(
+                "{}: Generating requests.".format(
+                    datetime.datetime.now().strftime("%H:%M:%S")
+                )
+            )
+
+            # generate the base URL and params for the post request
+            base_url, params = build_url_params(database, operating_mode)
+
+            # post requests to BOLD id engine API, collect the results urls
+            results_urls = build_post_requests(fasta_dict, base_url, params)
+
+            # user output
+            tqdm.write(
+                "{}: Waiting for results to load.".format(
+                    datetime.datetime.now().strftime("%H:%M:%S")
+                )
+            )
+
+            # collect links to download the json reports
+            download_json(results_urls, hdf_name_results, database, operating_mode)
+
+            # increase the download loops
+            download_loop += 1
+
     tqdm.write(
-        "{}: Generating requests.".format(datetime.datetime.now().strftime("%H:%M:%S"))
-    )
-
-    # generate the base URL and params for the post request
-    base_url, params = build_url_params(database, operating_mode)
-
-    # post requests to BOLD id engine API, collect the results urls
-    results_urls = build_post_requests(fasta_dict, base_url, params)
-
-    # user output
-    tqdm.write(
-        "{}: Waiting for results to load.".format(
+        "{}: Data download finished.".format(
             datetime.datetime.now().strftime("%H:%M:%S")
         )
-    )
-
-    # collect links to download the json reports
-    download_json(results_urls, hdf_name_results, database, operating_mode)
-
-
-if __name__ == "__main__":
-    main(
-        "C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta",
-        3,
-        3,
     )
