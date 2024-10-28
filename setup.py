@@ -20,7 +20,7 @@ setuptools.setup(
         "biopython>=1.84",
         "get_pypi_latest_version>=0.0.12",
         "more_itertools>=10.5.0",
-        "numpy>=2.1.2",
+        "numpy>=1.24.0, <2.0.0",
         "pandas>=2.2.3",
         "playwright>=1.48.0",
         "Requests>=2.32.3",
