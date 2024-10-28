@@ -281,7 +281,7 @@ def download_and_parse(
                     taxonomy + [pident] + [process_id] + [bin_uri]
                 )
         else:
-            json_record_results.append(["no_match"] * 6 + [0] + [""] + [""])
+            json_record_results.append(["no-match"] * 6 + [0] + [""] + [""])
 
         # transform the record to dataframe to add it to the hdf storage
         json_record_results = pd.DataFrame(
@@ -455,7 +455,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
 
 if __name__ == "__main__":
     main(
-        "C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_10.fasta",
+        "C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_1000.fasta",
         3,
         3,
     )
