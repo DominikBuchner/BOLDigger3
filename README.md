@@ -92,62 +92,29 @@ When a new version is released, you can update BOLDigger2 by typing:
 Buchner D, Leese F (2020) BOLDigger – a Python package to identify and organise sequences with the Barcode of Life Data systems. Metabarcoding and Metagenomics 4: e53535. https://doi.org/10.3897/mbmg.4.53535
 
 
-## BOLDigger2 Algorithm
+## The BOLDigger3 Algorithm
 
-The BOLDigger2 algorithm operates according to the following flowchart:
+The BOLDigger3 algorithm operates as follows:
 
-1. **Log in to BOLD:**
-   - Authenticate with the BOLD data systems.
+1. **Split the FASTA**: The input FASTA file is divided into chunks that fit the limits of the selected operating mode of the identification engine.
 
-2. **Generate Download Links for Species-Level Barcodes:**
-   - Generate the download links for the species-level barcode database for a batch of sequences.
+2. **Queue the Chunks**: These chunks are then queued in the identification engine for processing.
 
-3. **Download Top 100 Hits:**
-   - Retrieve the download links from the previous step.
-   - Download the top 100 hits for each link.
-   - Save the results to an HDF storage with the key `"top_100_hits_unsorted"`.
-   - Continue until all sequences are identified.
+3. **Check for Results**: The algorithm periodically checks if any results can be downloaded.
 
-4. **Identify Sequences Without Species-Level Hits:**
-   - Read the unsorted top 100 hits.
-   - Identify sequences that did not yield a species-level hit.
+4. **Data Download**: Once results are available, the data is downloaded.
 
-5. **Generate Download Links for All Records:**
-   - Generate download links for a batch of sequences without species-level hits for the "all records on BOLD" database.
+5. **Data Validation**: The algorithm ensures that all data has been correctly downloaded.
 
-6. **Download Top 100 Hits for All Records:**
-   - Retrieve the download links from the previous step.
-   - Download the top 100 hits for each link.
-   - Save the results to an HDF storage with the key `"top_100_hits_unsorted"`.
-   - Continue until all sequences are identified.
+6. **Retrieve Additional Data**: Additional data is obtained via the API.
 
-7. **Sort and Save Top Hits:**
-   - Read all top 100 hits.
-   - Remove duplicate entries.
-   - Sort the hits in the same order as in the FASTA file.
-   - Identify all public records and trigger the additional data download.
-   - Save them in the HDF storage with the key `"top_100_hits_sorted"`.
-
-8. **Save Additional Data:**
-   - Save the hits including additional data to the HDF storage with the key `"top_100_hits_additional_data"`.
-
-9. **Export Additional Data to Excel:**
-   - Save the additional data in Excel format.
-   - Split the data into tables of 1,000,000 lines each.
-
-10. **Calculate and Save Top Hits:**
-    - Calculate the top hit for each sequence.
-    - Save the top hits in both Excel format (`identification_result.xlsx`) and Parquet format (`identification_result.parquet.snappy`) for fast further processing.
-
-![how_it_works drawio](https://github.com/user-attachments/assets/f68dbb11-8ea8-45a9-96a3-8dba107ca5be)
-
-
+7. **Select Top Hit**: Finally, the algorithm selects the top hit backed by the most database entries for the final output.
 
 ### Top hit selection
 
-Different thresholds (97%: species level, 95%: genus level, 90%: family level, 85%: order level, <85% and >= 50: class level) for the taxonomic levels are used to find the best fitting hit. After determining the threshold for all hits the most common hit above the threshold will be selected. Note that for all hits below the threshold, the taxonomic resolution will be adjusted accordingly (e.g. for a 96% hit the species-level information will be discarded, and genus-level information will be used as the lowest taxonomic level).
+Different thresholds (97%: species level, 95%: genus level, 90%: family level, 85%: order level) for the taxonomic levels are used to find the best fitting hit. After determining the threshold for all hits the most common hit above the threshold will be selected. Note that for all hits below the threshold, the taxonomic resolution will be adjusted accordingly (e.g. for a 96% hit the species-level information will be discarded, and genus-level information will be used as the lowest taxonomic level).
 
-The BOLDigger2 algorithm functions as follows:
+The BOLDigger3 algorithm functions as follows:
 
 1. **Identify Maximum Similarity**: Find the maximum similarity value among the top 100 hits currently under consideration.
    
@@ -164,15 +131,15 @@ The BOLDigger2 algorithm functions as follows:
 7. **Threshold Adjustment**: If no hit with no missing values is found, increase the threshold to the next higher level and repeat the process until a hit is found.
 
 
-### BOLDigger2 Flagging System
+### BOLDigger3 Flagging System
 
-BOLDigger2 employs a flagging system to highlight certain conditions, indicating a degree of uncertainty in the selected hit. Currently, there are five flags implemented, which may be updated as needed:
+BOLDigger3 employs a flagging system to highlight certain conditions, indicating a degree of uncertainty in the selected hit. Currently, there are five flags implemented, which may be updated as needed:
 
 1. **Reverse BIN Taxonomy**: This flag is raised if all of the top 100 hits representing the selected match utilize reverse BIN taxonomy. Reverse BIN taxonomy assigns species names to deposited sequences on BOLD that lack species information, potentially introducing uncertainty.
 
 2. **Differing Taxonomic Information**: If there are two or more entries with differing taxonomic information above the selected threshold (e.g., two species above 97%), this flag is triggered, suggesting potential discrepancies.
 
-3. **Private or Early-Release Data**: If all of the top 100 hits representing the top hit are private or early-release hits, this flag is raised, indicating limited accessibility to data.
+3. **Private Data**: If all of the top 100 hits representing the top hit are private hits, this flag is raised, indicating limited accessibility to data.
 
 4. **Unique Hit**: This flag indicates that the top hit result represents a unique hit among the top 100 hits, potentially requiring further scrutiny.
 
