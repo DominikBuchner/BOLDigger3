@@ -63,9 +63,9 @@ def main() -> None:
 
     # add version control
     # get the installed version
-    current_version = version("boldigger2")
+    current_version = version("boldigger3")
     obtainer = GetPyPiLatestVersion()
-    latest_version = obtainer("boldigger2")
+    latest_version = obtainer("boldigger3")
 
     # give a user warning if the latest version is not installed
     if current_version != latest_version:
@@ -76,7 +76,7 @@ def main() -> None:
         )
 
     # add the version argument
-    parser.add_argument("--version", action="version", version=version("boldigger2"))
+    parser.add_argument("--version", action="version", version=version("boldigger3"))
 
     # parse the arguments
     arguments = parser.parse_args()
