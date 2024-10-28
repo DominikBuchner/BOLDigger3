@@ -1,0 +1,14 @@
+LICENSE
+README.md
+setup.py
+boldigger3/__init__.py
+boldigger3/__main__.py
+boldigger3/additional_data_download.py
+boldigger3/id_engine.py
+boldigger3/select_top_hit.py
+boldigger3.egg-info/PKG-INFO
+boldigger3.egg-info/SOURCES.txt
+boldigger3.egg-info/dependency_links.txt
+boldigger3.egg-info/entry_points.txt
+boldigger3.egg-info/requires.txt
+boldigger3.egg-info/top_level.txt

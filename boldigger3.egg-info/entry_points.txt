@@ -1,0 +1,2 @@
+[console_scripts]
+boldigger3 = boldigger3.__main__:main
