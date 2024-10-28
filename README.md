@@ -49,10 +49,14 @@ BOLDigger3 uses the Python package ```playwright```, which needs a separate inst
 `playwright install`
 
 **FOR BOLDigger2 USERS:**
-BOLDigger2 used requests-html which relied on an old version of pyppeteer. This may lead to conflicts with playwright. To solve:
+BOLDigger2 used requests-html which relied on an old version of pyppeteer. This may lead to conflicts with playwright.
+Additionally, don't forget to uninstall boldigger/boldigger2
+To solve:
 
 `
 pip uninstall pyppeteer
+pip uninstall boldigger
+pip uninstall boldigger2
 pip install --upgrade pyee
 `
 
