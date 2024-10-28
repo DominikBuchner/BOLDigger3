@@ -1,6 +1,7 @@
 # BOLDigger3
  
-![boldigger_logo]()
+![BOLDigger3](https://github.com/user-attachments/assets/99606be9-8ae1-4e90-a5d5-4a6a3311f48c)
+
 
 [![Downloads](https://pepy.tech/badge/boldigger3)](https://pepy.tech/project/boldigger3)
 
