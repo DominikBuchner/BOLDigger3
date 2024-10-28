@@ -56,21 +56,21 @@ To run the ```identify``` function, use the following command:
 
 The ```--db``` is a number between 1 and 7 corresponding to the seven databases BOLD v5 currently offers:
 
-1: **ANIMAL LIBRARY (PUBLIC)**
-2: **ANIMAL SPECIES-LEVEL LIBRARY (PUBLIC + PRIVATE)**
-3: **ANIMAL LIBRARY (PUBLIC+PRIVATE)**
-4: **VALIDATED CANADIAN ARTHROPOD LIBRARY**
-5: **PLANT LIBRARY (PUBLIC)**
-6: **FUNGI LIBRARY (PUBLIC)**
-7: **ANIMAL SECONDARY MARKERS (PUBLIC)**
+1: **ANIMAL LIBRARY (PUBLIC)**   
+2: **ANIMAL SPECIES-LEVEL LIBRARY (PUBLIC + PRIVATE)**   
+3: **ANIMAL LIBRARY (PUBLIC+PRIVATE)**    
+4: **VALIDATED CANADIAN ARTHROPOD LIBRARY**   
+5: **PLANT LIBRARY (PUBLIC)**   
+6: **FUNGI LIBRARY (PUBLIC)**   
+7: **ANIMAL SECONDARY MARKERS (PUBLIC)**   
 
 # Operating modes
 
 The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers:
 
-1: **Rapid Species Search**
-2: **Genus and Species Search**
-3: **Exhaustive Search**
+1: **Rapid Species Search**   
+2: **Genus and Species Search**   
+3: **Exhaustive Search**   
 
 To customize the implemented thresholds for user-specific needs, the thresholds can be passed as an additional (ordered) argument. Up to five different thresholds can be passed for the different taxonomic levels (Species, Genus, Family, Order, Class). Thresholds not passed will be replaced by default, but BOLDigger3 will also inform you about this:
 
