@@ -54,12 +54,12 @@ BOLDigger2 used requests-html which relied on an old version of pyppeteer. This 
 Additionally, don't forget to uninstall boldigger/boldigger2
 To solve:
 
-`
+```
 pip uninstall pyppeteer
 pip uninstall boldigger
 pip uninstall boldigger2
 pip install --upgrade pyee
-`
+```
 
 To run the ```identify``` function, use the following command:
 
