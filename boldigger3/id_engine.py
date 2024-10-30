@@ -210,7 +210,7 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
 
                 # fetch the result and build result urls from it
                 result = json.loads(response.text)
-                result_url = "https://id.boldsystems.org/results/{}".format(
+                result_url = "https://id.boldsystems.org/processing/{}".format(
                     result["sub_id"]
                 )
 
@@ -378,7 +378,7 @@ def download_json(
                     # open it with the browser to check if results are visible
                     page.goto(url)
                     try:
-                        page.wait_for_selector("#jsonlResults", timeout=20000)
+                        page.wait_for_selector("#jsonlResults", timeout=120000)
 
                         download_url = page.query_selector(
                             "#jsonlResults"
