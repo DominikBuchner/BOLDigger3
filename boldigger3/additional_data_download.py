@@ -245,7 +245,7 @@ def add_to_hdf(hdf_name_results: str, response: object) -> None:
         "institution_storing": 150,
         "country_or_ocean": 80,
         "identifier": 80,
-        "id_method": 250,
+        "id_method": 350,
         "record_page": 70,
     }
 
