@@ -72,8 +72,12 @@ def parse_record_page(html_response: object, url: str) -> list:
     # extract the process id from the url
     process_id = url.split("/")[-1]
 
-    # get the status from the status code
-    status_code_to_status = {200: "public", 404: "private", 500: "unavailable"}
+    # get the status from the status code, all retries exceeded will be routed to 500
+    status_code_to_status = {
+        200: "public",
+        404: "private",
+        500: "unavailable",
+    }
     status = status_code_to_status[html_response.status_code]
 
     # testing
