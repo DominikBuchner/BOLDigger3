@@ -299,7 +299,7 @@ def main(fasta_path: str) -> None:
     unique_process_ids = check_already_downloaded(hdf_name_results, unique_process_ids)
 
     # calculate the number of batches
-    batch_count = len(list(more_itertools.chunked(unique_process_ids, 5000)))
+    batch_count = len(list(more_itertools.chunked(unique_process_ids, 10000)))
     batch_counter = 1
 
     # only start the download loop if there are ids to downlaod
