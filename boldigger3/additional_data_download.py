@@ -318,7 +318,7 @@ def main(fasta_path: str) -> None:
             for idx in unique_process_ids
         ]
 
-        for chunk in more_itertools.chunked(urls, 5000):
+        for chunk in more_itertools.chunked(urls, 10000):
             tqdm.write(
                 "{}: Downloading batch {} of {}.".format(
                     datetime.datetime.now().strftime("%H:%M:%S"),
@@ -326,7 +326,7 @@ def main(fasta_path: str) -> None:
                     batch_count,
                 )
             )
-            # requests the additional data asynchronously in batches of 5000 urls
+            # requests the additional data asynchronously in batches of 10000 urls
             # limit the concurrent requests to 50
             semaphore = asyncio.Semaphore(50)
 
