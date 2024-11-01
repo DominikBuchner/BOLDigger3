@@ -191,8 +191,8 @@ async def as_session(download_urls, semaphore) -> list:
 
     # only retry if the page failed to load
     retry_strategy = Retry(
-        total=5,
-        status_forcelist=[500, 502],
+        total=3,
+        status_forcelist=[500, 502, 504],
         backoff_factor=2,
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -327,8 +327,8 @@ def main(fasta_path: str) -> None:
                 )
             )
             # requests the additional data asynchronously in batches of 5000 urls
-            # limit the concurrent requests to 25
-            semaphore = asyncio.Semaphore(25)
+            # limit the concurrent requests to 50
+            semaphore = asyncio.Semaphore(50)
 
             # gather the responses
             response = asyncio.run(as_session(chunk, semaphore))

@@ -95,9 +95,7 @@ def already_downloaded(fasta_dict: dict, hdf_name_results: str) -> dict:
         idx = pd.read_hdf(hdf_name_results, key="results_unsorted")["id"]
 
         # remove those ids from the fasta dict
-        fasta_dict = {
-            id: seq for (id, seq) in fasta_dict.items() if id not in idx.unique()
-        }
+        fasta_dict = {id: seq for (id, seq) in fasta_dict.items() if id not in set(idx)}
 
         # return the updated fasta dict
         return fasta_dict
