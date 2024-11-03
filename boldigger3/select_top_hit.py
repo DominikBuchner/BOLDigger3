@@ -186,7 +186,7 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
 # BOLD taxonomy is not complete
 def return_incomplete_taxonomy(idx: int):
     incomplete_taxonomy = {
-        "ID": idx,
+        "id": idx,
         "Phylum": "IncompleteTaxonomy",
         "Class": "IncompleteTaxnonmy",
         "Order": "IncompleteTaxonomy",
@@ -194,7 +194,7 @@ def return_incomplete_taxonomy(idx: int):
         "Genus": "IncompleteTaxonomy",
         "Species": "IncompleteTaxonomy",
         "pct_identity": 0,
-        "Status": np.nan,
+        "status": np.nan,
         "records": np.nan,
         "selected_level": np.nan,
         "BIN": np.nan,
