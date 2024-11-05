@@ -287,7 +287,7 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
                 "status",
             ]
         ]
-        for value in ["records", "selected_level", "BIN", "flags", "Status"]:
+        for value in ["records", "selected_level", "BIN", "flags", "status"]:
             return_value[value] = np.nan
 
         return return_value
