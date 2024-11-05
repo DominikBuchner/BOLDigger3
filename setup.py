@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="boldigger3",
-    version="1.1.10",
+    version="1.1.11",
     author="Dominik Buchner",
     author_email="dominik.buchner@uni-due.de",
     description="A python package to query different databases of boldsystems.org v5!",
@@ -34,6 +34,7 @@ setuptools.setup(
         "openpyxl>=3.1.1",
         "pyarrow>=11.0.0",
         "lxml_html_clean>=0.1.1",
+        "xlsxwriter >= 3.0.5",
     ],
     include_package_data=True,
     classifiers=[

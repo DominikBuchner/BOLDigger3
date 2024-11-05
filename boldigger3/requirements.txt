@@ -17,3 +17,4 @@ soupsieve>=2.5
 openpyxl>=3.1.1
 pyarrow>=11.0.0
 lxml_html_clean>=0.1.1
+xlsxwriter >= 3.0.5
