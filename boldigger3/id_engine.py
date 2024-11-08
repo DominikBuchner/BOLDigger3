@@ -373,9 +373,9 @@ def download_json(
                 while results_urls:
                     # select a random resultpage
                     url = random.choice(results_urls)
-                    # open it with the browser to check if results are visible
-                    page.goto(url, timeout=60000)
                     try:
+                        # open it with the browser to check if results are visible
+                        page.goto(url, timeout=60000)
                         page.wait_for_selector("#jsonlResults", timeout=60000)
 
                         download_url = page.query_selector(
