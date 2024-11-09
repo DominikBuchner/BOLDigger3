@@ -1,4 +1,4 @@
-import datetime, sys, time, random, more_itertools, requests_html_playwright, json, gzip
+import datetime, sys, time, random, more_itertools, requests_html_playwright, json, gzip, pickle, os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -208,7 +208,7 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
 
                 # fetch the result and build result urls from it
                 result = json.loads(response.text)
-                result_url = "https://id.boldsystems.org/results/{}".format(
+                result_url = "https://id.boldsystems.org/processing/{}".format(
                     result["sub_id"]
                 )
 
@@ -347,7 +347,11 @@ def download_and_parse(
 
 # function to download the results as json
 def download_json(
-    results_urls: list, hdf_name_results: str, database: int, operating_mode: int
+    results_urls: list,
+    hdf_name_results: str,
+    database: int,
+    operating_mode: int,
+    download_queue_name: str,
 ):
     """Function to download the JSON Results from the BOLD id engine download URLs
 
@@ -356,6 +360,7 @@ def download_json(
         hdf_name_results (str): Name of the hdf storage to write to.
         database (int): database that was queried
         operating_mode (int): operating mode for the BOLD query
+        download_queue_name: path to the file where the download queue is stored
     """
     # start a headless playwright session to render the javascript
     # no async code needed since waiting for the rendering is required anyways
@@ -376,6 +381,11 @@ def download_json(
                     try:
                         # open it with the browser to check if results are visible
                         page.goto(url, timeout=60000)
+                    except TimeoutError:
+                        continue
+
+                    # try to find the jsonlResults selector
+                    try:
                         page.wait_for_selector("#jsonlResults", timeout=60000)
 
                         download_url = page.query_selector(
@@ -391,6 +401,11 @@ def download_json(
                         )
 
                         results_urls.remove(url)
+
+                        # update the pickle storage
+                        with open(download_queue_name, "wb") as download_queue:
+                            pickle.dump(results_urls, download_queue)
+
                         pbar.update(1)
                         # user output
                         tqdm.write(
@@ -403,7 +418,27 @@ def download_json(
                         )
                         counter += 1
                     except TimeoutError:
+                        # give user output and update if it is not found
+                        queued = page.query_selector("#progress-queued").text_content()
+                        processing = page.query_selector(
+                            "#progress-processing"
+                        ).text_content()
+                        completed = page.query_selector(
+                            "#progress-completed"
+                        ).text_content()
+                        # give user output
+                        tqdm.write(
+                            "{}: Status of current request: {}, {}, {}.".format(
+                                datetime.datetime.now().strftime("%H:%M:%S"),
+                                queued,
+                                processing,
+                                completed,
+                            )
+                        )
                         continue
+                else:
+                    # delete the pickle storage for next run
+                    os.remove(download_queue_name)
 
 
 def main(fasta_path: str, database: int, operating_mode: int) -> None:
@@ -427,6 +462,11 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         "{}_result_storage.h5.lz".format(fasta_name)
     )
 
+    # generate a name for the download queue
+    download_queue_name = project_directory.joinpath(
+        "{}_download_queue.pkl".format(fasta_name)
+    )
+
     # count the total download loops
     download_loop = 1
 
@@ -446,7 +486,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         if fasta_dict:
             # user output
             tqdm.write(
-                "{}: Generating requests.".format(
+                "{}: Generating requests and searching for previous runs.".format(
                     datetime.datetime.now().strftime("%H:%M:%S")
                 )
             )
@@ -455,7 +495,22 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
             base_url, params = build_url_params(database, operating_mode)
 
             # post requests to BOLD id engine API, collect the results urls
-            results_urls = build_post_requests(fasta_dict, base_url, params)
+            # only generate new requests if no previous download queue is found
+            try:
+                with open(download_queue_name, "rb") as download_queue:
+                    results_urls = pickle.load(download_queue)
+                # user output
+                tqdm.write(
+                    "{}: Found unfinished downloads from previous runs. Continueing download.".format(
+                        datetime.datetime.now().strftime("%H:%M:%S")
+                    )
+                )
+
+            except FileNotFoundError:
+                results_urls = build_post_requests(fasta_dict, base_url, params)
+                # save the download queue to file
+                with open(download_queue_name, "wb") as download_queue:
+                    pickle.dump(results_urls, download_queue)
 
             # user output
             tqdm.write(
@@ -465,7 +520,13 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
             )
 
             # collect links to download the json reports
-            download_json(results_urls, hdf_name_results, database, operating_mode)
+            download_json(
+                results_urls,
+                hdf_name_results,
+                database,
+                operating_mode,
+                download_queue_name,
+            )
 
             # increase the download loops
             download_loop += 1
