@@ -418,24 +418,28 @@ def download_json(
                         )
                         counter += 1
                     except TimeoutError:
-                        # give user output and update if it is not found
-                        queued = page.query_selector("#progress-queued").text_content()
-                        processing = page.query_selector(
-                            "#progress-processing"
-                        ).text_content()
-                        completed = page.query_selector(
-                            "#progress-completed"
-                        ).text_content()
-                        # give user output
-                        tqdm.write(
-                            "{}: Status of current request: {}, {}, {}.".format(
-                                datetime.datetime.now().strftime("%H:%M:%S"),
-                                queued,
-                                processing,
-                                completed,
+                        try:
+                            # give user output and update if it is not found
+                            queued = page.query_selector(
+                                "#progress-queued"
+                            ).text_content()
+                            processing = page.query_selector(
+                                "#progress-processing"
+                            ).text_content()
+                            completed = page.query_selector(
+                                "#progress-completed"
+                            ).text_content()
+                            # give user output
+                            tqdm.write(
+                                "{}: Status of current request: {}, {}, {}.".format(
+                                    datetime.datetime.now().strftime("%H:%M:%S"),
+                                    queued,
+                                    processing,
+                                    completed,
+                                )
                             )
-                        )
-                        continue
+                        except AttributeError:
+                            continue
                 else:
                     # delete the pickle storage for next run
                     os.remove(download_queue_name)
