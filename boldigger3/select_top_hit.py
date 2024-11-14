@@ -496,6 +496,7 @@ def main(fasta_path: str, thresholds: list) -> None:
             complete_dataset_clean.loc[complete_dataset_clean["id"] == idx]
             .copy()
             .reset_index(drop=True)
+            .sort_values(by=["pct_identity"], axis=0, ascending=False)
         )
 
         # find the top hit
