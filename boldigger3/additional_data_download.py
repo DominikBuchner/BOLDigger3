@@ -7,7 +7,7 @@ import pandas as pd
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from requests.exceptions import RetryError
-from urllib3.exceptions import IncompleteRead
+from requests.exceptions import ChunkedEncodingError
 
 
 # function to collect the process ids from the hdf storage
@@ -151,7 +151,7 @@ async def as_request(url, as_session) -> list:
             response = Response()
             response.status_code = 500
             break
-        except IncompleteRead:
+        except ChunkedEncodingError:
             time.sleep(3)
             continue
 
