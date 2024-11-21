@@ -203,9 +203,6 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 # submit the post request
                 response = session.post(base_url, params=params, files=files)
 
-                # wait for a moment to not overwhelm the id engine API
-                time.sleep(random.uniform(1, 3))
-
                 # fetch the result and build result urls from it
                 result = json.loads(response.text)
                 result_url = "https://id.boldsystems.org/processing/{}".format(
