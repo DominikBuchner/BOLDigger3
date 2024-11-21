@@ -7,7 +7,7 @@ import pandas as pd
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from requests.exceptions import RetryError
-from requests.exceptions import ChunkedEncodingError
+from requests.exceptions import ChunkedEncodingError, ConnectionError
 
 
 # function to collect the process ids from the hdf storage
@@ -143,17 +143,14 @@ async def as_request(url, as_session) -> list:
         list: Returns the parsed response as list.
     """
     # request the url from BOLD
-    while True:
-        try:
-            response = await as_session.get(url)
-            break
-        except RetryError:
-            response = Response()
-            response.status_code = 500
-            break
-        except ChunkedEncodingError:
-            time.sleep(3)
-            continue
+    try:
+        response = await as_session.get(url, timeout=3)
+    except RetryError:
+        response = Response()
+        response.status_code = 500
+    except (ChunkedEncodingError, ConnectionError):
+        response = Response()
+        response.status_code = 500
 
     # parse the response here
     response = parse_record_page(response, url)
