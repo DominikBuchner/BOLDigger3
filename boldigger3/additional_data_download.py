@@ -1,4 +1,4 @@
-import asyncio, requests_html_playwright, more_itertools, datetime
+import asyncio, requests_html_playwright, more_itertools, datetime, time
 from boldigger3.id_engine import parse_fasta
 from bs4 import BeautifulSoup as BSoup
 from requests import Response
@@ -7,6 +7,7 @@ import pandas as pd
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from requests.exceptions import RetryError
+from urllib3.exceptions import IncompleteRead
 
 
 # function to collect the process ids from the hdf storage
@@ -142,11 +143,18 @@ async def as_request(url, as_session) -> list:
         list: Returns the parsed response as list.
     """
     # request the url from BOLD
-    try:
-        response = await as_session.get(url)
-    except RetryError:
-        response = Response()
-        response.status_code = 500
+    while True:
+        try:
+            response = await as_session.get(url)
+            break
+        except RetryError:
+            response = Response()
+            response.status_code = 500
+            break
+        except IncompleteRead:
+            time.sleep(3)
+            continue
+
     # parse the response here
     response = parse_record_page(response, url)
 
