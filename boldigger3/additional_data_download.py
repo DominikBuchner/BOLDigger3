@@ -1,4 +1,4 @@
-import asyncio, requests_html_playwright, more_itertools, datetime, time
+import asyncio, requests_html_playwright, more_itertools, datetime, time, sys
 from boldigger3.id_engine import parse_fasta
 from bs4 import BeautifulSoup as BSoup
 from requests import Response
@@ -21,12 +21,23 @@ def collect_process_ids(hdf_name_results: str) -> list:
         tuple: Returns a list of unique process ids.
     """
 
-    # read the results from hdf storage
-    unsorted_results = pd.read_hdf(hdf_name_results, key="results_unsorted")
-    process_ids = unsorted_results["process_id"]
+    # read the process ids from hdf storage
+    unsorted_results = pd.read_hdf(
+        hdf_name_results,
+        key="results_unsorted",
+        columns=["process_id"],
+        where="process_id != ''",
+        iterator=True,
+    )
+
+    # define the unique process ids variable
+    unique_process_ids = set()
 
     # remove duplicates and empty strings from process ids
-    unique_process_ids = list(set([idx for idx in process_ids if idx != ""]))
+    for chunk in unsorted_results:
+        unique_process_ids = unique_process_ids.union(
+            set(chunk["process_id"].to_list())
+        )
 
     # return the ids
     return unique_process_ids
@@ -44,8 +55,19 @@ def check_already_downloaded(hdf_name_results: str, unique_process_ids: list) ->
         list: Returns a list of the unique process ids that have not been downloaded yet.
     """
     try:
-        additional_data = pd.read_hdf(hdf_name_results, key="additional_data")
-        downloaded_ids = set(additional_data["process_id"])
+        additional_data = pd.read_hdf(
+            hdf_name_results,
+            key="additional_data",
+            columns=["process_id"],
+            iterator=True,
+        )
+
+        # collect the already downloaded ids
+        downloaded_ids = set()
+
+        # loop over all chunks of downloaded ids
+        for chunk in additional_data:
+            downloaded_ids = downloaded_ids.union(set(chunk["process_id"].to_list()))
 
         # filter unique ids
         unique_process_ids = [

@@ -41,7 +41,7 @@ def main() -> None:
         required=True,
         help="Integer that defines which database to use (1 to 7). See readme for details",
         type=int,
-        choices=range(1, 8),
+        choices=range(1, 9),
     )
 
     # add the operating mode argument
@@ -50,7 +50,7 @@ def main() -> None:
         required=True,
         help="Integer that defines which operating mode to use (1 to 3). See readme for details.",
         type=int,
-        choices=range(1, 4),
+        choices=range(1, 5),
     )
 
     # add the optional argument thresholds
