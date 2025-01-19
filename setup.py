@@ -18,7 +18,7 @@ setuptools.setup(
         "beautifulsoup4>=4.12.3",
         "Bio>=1.7.1",
         "biopython>=1.84",
-        "get_pypi_latest_version>=0.0.7",
+        "get_pypi_latest_version>=0.1.0",
         "more_itertools>=10.5.0",
         "numpy>=1.24.0, <2.0.0",
         "pandas>=2.2.3",
