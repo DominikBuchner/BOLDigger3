@@ -67,7 +67,7 @@ To run the ```identify``` function, use the following command:
 
 # Databases
 
-The ```--db``` is a number between 1 and 7 corresponding to the seven databases BOLD v5 currently offers:
+The ```--db``` is a number between 1 and 8 corresponding to the eight databases BOLD v5 currently offers:
 
 1: **ANIMAL LIBRARY (PUBLIC)**   
 2: **ANIMAL SPECIES-LEVEL LIBRARY (PUBLIC + PRIVATE)**   
@@ -76,14 +76,21 @@ The ```--db``` is a number between 1 and 7 corresponding to the seven databases 
 5: **PLANT LIBRARY (PUBLIC)**   
 6: **FUNGI LIBRARY (PUBLIC)**   
 7: **ANIMAL SECONDARY MARKERS (PUBLIC)**   
+8: **VALIDATED ANIMAL RED LIST LIBRARY**
 
 # Operating modes
 
-The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers:
+The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers. Another mode 4 has been added
+with version 1.2.6, rapid mode for short sequences:
 
 1: **Rapid Species Search**   
 2: **Genus and Species Search**   
 3: **Exhaustive Search**   
+4: **Rapid mode, sequences shorter than 225 bp **
+
+Note on mode 4: Since BOLD v5 currently only offers a search depth of 94% similarity for sequences shorter than 225 bp, the rapid mode for short
+sequences has been implemented. It allows for the submission of 1000 sequences at a time with 94% similariy search depth but returns top 100 hits
+instead of 25.
 
 To customize the implemented thresholds for user-specific needs, the thresholds can be passed as an additional (ordered) argument. Up to five different thresholds can be passed for the different taxonomic levels (Species, Genus, Family, Order, Class). Thresholds not passed will be replaced by default, but BOLDigger3 will also inform you about this:
 

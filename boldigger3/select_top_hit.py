@@ -521,7 +521,7 @@ def gather_top_hits(
     # loop over the chunks of ids and retrieve them from the hdf store
     for id_chunk in tqdm(
         sequence_ids,
-        id_chunk_count,
+        total=id_chunk_count,
         desc=f"Calculating top hits for {id_chunk_count} batches",
     ):
         complete_dataset_clean = pd.read_hdf(
