@@ -91,11 +91,24 @@ def already_downloaded(fasta_dict: dict, hdf_name_results: str) -> dict:
     """
     # try to open the hdf file
     try:
-        # only collect the ids from the hdf
-        idx = pd.read_hdf(hdf_name_results, key="results_unsorted")["id"]
+        # only collect the ids from the hdf as and iterator
+        idx_data = pd.read_hdf(
+            hdf_name_results,
+            key="results_unsorted",
+            columns=["id"],
+            iterator=True,
+            chunksize=1000000,
+        )
+
+        # define the idx set to collect from hdf
+        idx = set()
+
+        # loop over the chunks and collect the ids
+        for chunk in idx_data:
+            idx = idx.union(set(chunk["id"].to_list()))
 
         # remove those ids from the fasta dict
-        fasta_dict = {id: seq for (id, seq) in fasta_dict.items() if id not in set(idx)}
+        fasta_dict = {id: seq for (id, seq) in fasta_dict.items() if id not in idx}
 
         # return the updated fasta dict
         return fasta_dict
@@ -125,6 +138,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
         5: "public.plants",
         6: "public.fungi",
         7: "all.animal-alt",
+        8: "DS-IUCNPUB",
     }
 
     # the operating mode is translated here
@@ -132,6 +146,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
         1: {"mi": 0.94, "maxh": 25},
         2: {"mi": 0.9, "maxh": 50},
         3: {"mi": 0.85, "maxh": 100},
+        4: {"mi": 0.94, "maxh": 100},
     }
 
     # params can be calculated from the database and operating mode
@@ -191,6 +206,7 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
 
         # gather result urls here
         results_urls = []
+        request_times = []
 
         with tqdm(desc="Queuing sequences in ID engine", total=len(fasta_dict)) as pbar:
             for query_string in query_generators:
@@ -211,10 +227,10 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
 
                 # append the resulting url
                 results_urls.append(result_url)
+                request_times.append(pd.Timestamp.now())
                 # update the progress bar
                 pbar.update(len(data.split(">")) - 1)
 
-    # return the result urls
     return results_urls
 
 

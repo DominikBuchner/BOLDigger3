@@ -39,18 +39,18 @@ def main() -> None:
     parser_identify.add_argument(
         "--db",
         required=True,
-        help="Integer that defines which database to use (1 to 7). See readme for details",
+        help="Integer that defines which database to use (1 to 8). See readme for details",
         type=int,
-        choices=range(1, 8),
+        choices=range(1, 9),
     )
 
     # add the operating mode argument
     parser_identify.add_argument(
         "--mode",
         required=True,
-        help="Integer that defines which operating mode to use (1 to 3). See readme for details.",
+        help="Integer that defines which operating mode to use (1 to 4). See readme for details.",
         type=int,
-        choices=range(1, 4),
+        choices=range(1, 5),
     )
 
     # add the optional argument thresholds
