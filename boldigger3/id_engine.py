@@ -93,7 +93,11 @@ def already_downloaded(fasta_dict: dict, hdf_name_results: str) -> dict:
     try:
         # only collect the ids from the hdf as and iterator
         idx_data = pd.read_hdf(
-            hdf_name_results, key="results_unsorted", columns=["id"], iterator=True
+            hdf_name_results,
+            key="results_unsorted",
+            columns=["id"],
+            iterator=True,
+            chunksize=1000000,
         )
 
         # define the idx set to collect from hdf

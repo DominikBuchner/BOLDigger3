@@ -28,6 +28,7 @@ def collect_process_ids(hdf_name_results: str) -> list:
         columns=["process_id"],
         where="process_id != ''",
         iterator=True,
+        chunksize=1000000,
     )
 
     # define the unique process ids variable
@@ -60,6 +61,7 @@ def check_already_downloaded(hdf_name_results: str, unique_process_ids: list) ->
             key="additional_data",
             columns=["process_id"],
             iterator=True,
+            chunksize=1000000,
         )
 
         # collect the already downloaded ids

@@ -8,6 +8,67 @@ from tqdm import tqdm
 from string import punctuation, digits
 
 
+# function to sort the data by input order
+def sort_by_input_order(fasta_dict: dict, dataset_df: object) -> object:
+    """Function to sort a dataset or a chunk of a dataset by input order (order in the fasta file).
+
+    Args:
+        fasta_dict (dict): The fasta dict containing the input order.
+        dataset_df (object): Dataframe already holding the added additional data
+
+    Returns:
+        object: The dataframe sorted by input order
+    """
+    # build a sorter to sort the the complete dataset by input order
+    sorter = {name: idx for idx, name in enumerate(fasta_dict.keys())}
+
+    # add the sorter column to the complete dataset
+    dataset_df["sorter"] = dataset_df["id"].map(sorter)
+
+    # name the index for sorting
+    dataset_df.index.name = "index"
+
+    # perform the sorting, remove the sorter, reset the index
+    dataset_df = (
+        dataset_df.sort_values(by=["sorter", "index"], ascending=[True, True])
+        .drop(labels=["sorter"], axis=1)
+        .reset_index(drop=True)
+    )
+
+    # return the sorted dataset
+    return dataset_df
+
+
+# function to clean the dataset (remove number, special chars)
+def clean_dataset(dataset_df: object) -> object:
+    """Funtion to clean the a chunk of the downloaded dataset. Removes names with special characters and numbers
+
+    Args:
+        dataset (object): The complete dataset as a dataframe.
+
+    Returns:
+        object: The cleaned dataset as a dataframe
+    """
+    dataset_df = dataset_df.copy()
+
+    # remove punctuation and numbers from the taxonomy
+    # exclude "-" since it can be part of a species name in rare cases
+    # also retains no-matches
+    specials = "".join([char for char in punctuation + digits if char != "-"])
+    levels = ["Phylum", "Class", "Order", "Family", "Genus", "Species"]
+
+    # clean the dataset
+    for level in levels:
+        dataset_df[level] = np.where(
+            dataset_df[level].str.contains("[{}]".format(specials)),
+            np.nan,
+            dataset_df[level],
+        )
+
+    # return the cleaned dataset
+    return dataset_df
+
+
 # function to combine additional data and hits and sort by input order
 def combine_and_sort(
     hdf_name_results: str, fasta_dict: dict, fasta_name: str, project_path: str
@@ -24,60 +85,77 @@ def combine_and_sort(
     Returns:
         object: Dataframe with combined data.
     """
-    # load the additional data from the hdf storage
-    additional_data = pd.read_hdf(hdf_name_results, key="additional_data")
+    # chunk to fasta dict in blocks of 10.000 seqs --> results in a maximum of 1.000.000 lines reads
+    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 10000)
 
-    # transform additional data to dict, retain the column names
-    additional_data = additional_data.to_dict("tight")
-    column_names = additional_data["columns"][1:]
-    additional_data = additional_data["data"]
+    # loop over the chunks of ids and retrieve them from the hdf store
+    for id_chunk in sequence_ids:
+        unsorted_results = pd.read_hdf(
+            hdf_name_results, key="results_unsorted", where=f"id in {id_chunk}"
+        ).reset_index(drop=True)
 
-    # parse the additional data into a dict in the form of process_id : [data fields] to rebuild the dataframe
-    additional_data = ((record[0], record[1:]) for record in additional_data)
-    additional_data = {record: data for record, data in additional_data}
+        # extract the process ids to collect from the additional data
+        process_ids_to_retrieve = unsorted_results["process_id"]
+        process_ids_to_retrieve = process_ids_to_retrieve[process_ids_to_retrieve != ""]
 
-    # extract the original process ids from the downloaded top n hits
-    unsorted_results = pd.read_hdf(
-        hdf_name_results, key="results_unsorted"
-    ).reset_index(drop=True)
+        # extract the additional data from the hdf based on the ids to retrieve
+        additional_data = pd.read_hdf(
+            hdf_name_results,
+            key="additional_data",
+            where=f"process_id in {process_ids_to_retrieve.to_list()}",
+        )
 
-    # extract the process ids and remove all data without id
-    process_ids = unsorted_results["process_id"]
-    process_ids = process_ids[process_ids != ""]
+        # transform additional data to dict, retain the column names
+        additional_data = additional_data.to_dict("tight")
+        column_names = additional_data["columns"][1:]
+        additional_data = additional_data["data"]
 
-    # create a dataframe with the additional data and duplicate values since each
-    # process id only has to be requested once
-    additional_data = pd.DataFrame(
-        data=[additional_data[record] for record in process_ids],
-        columns=column_names,
-        index=process_ids.index,
-    )
+        # parse the additional data into a dict in the form of process_id : [data fields] to rebuild the dataframe
+        additional_data = ((record[0], record[1:]) for record in additional_data)
+        additional_data = {record: data for record, data in additional_data}
 
-    # merge the unsorted results and the additional data
-    complete_dataset = pd.concat([unsorted_results, additional_data], axis=1)
+        # create a dataframe with the additional data and duplicate values since each
+        # process id only has to be requested once
+        additional_data = pd.DataFrame(
+            data=[additional_data[record] for record in process_ids_to_retrieve],
+            columns=column_names,
+            index=process_ids_to_retrieve.index,
+        )
 
-    # build a sorter to sort the the complete dataset by input order
-    sorter = {name: idx for idx, name in enumerate(fasta_dict.keys())}
+        # merge the unsorted results and the additional data
+        complete_dataset = pd.concat([unsorted_results, additional_data], axis=1)
 
-    # add the sorter column to the complete dataset
-    complete_dataset["sorter"] = complete_dataset["id"].map(sorter)
+        # sort the complete dataset chunk by input order
+        complete_dataset = sort_by_input_order(fasta_dict, complete_dataset)
 
-    # name the index for sorting
-    complete_dataset.index.name = "index"
+        # clean the complete dataset chunk
+        complete_dataset = clean_dataset(complete_dataset)
 
-    # perform the sorting, remove the sorter, reset the index
-    complete_dataset = (
-        complete_dataset.sort_values(by=["sorter", "index"], ascending=[True, True])
-        .drop(labels=["sorter"], axis=1)
-        .reset_index(drop=True)
-    )
+        # preset the itemsizes
+        item_sizes = {
+            "id": 100,
+            "Phylum": 80,
+            "Class": 80,
+            "Order": 80,
+            "Family": 80,
+            "Genus": 80,
+            "Species": 80,
+            "bin_uri": 25,
+            "request_date": 30,
+            "database": 5,
+            "operating_mode": 5,
+            "process_id": 30,
+            "status": 11,
+            "sex": 8,
+            "lifestage": 80,
+            "institution_storing": 150,
+            "country_or_ocean": 80,
+            "identifier": 80,
+            "id_method": 400,
+            "record_page": 70,
+        }
 
-    # save the complete dataset in the result storage only once
-    store = pd.HDFStore(hdf_name_results, "r")
-    keys = store.keys()
-    store.close()
-
-    if "/complete_dataset" not in keys:
+        # append each chunk to the hdf store
         with pd.HDFStore(
             hdf_name_results, mode="a", complib="blosc:blosclz", complevel=9
         ) as hdf_output:
@@ -86,50 +164,20 @@ def combine_and_sort(
                 value=complete_dataset,
                 format="t",
                 data_columns=True,
+                min_itemsize=item_sizes,
                 complib="blosc:blosclz",
                 complevel=9,
             )
 
-    # save the complete dataset to excel in chunks
-    idx_parts = more_itertools.chunked(complete_dataset.index, 1000000)
+    # # save the complete dataset to excel in chunks
+    dataset_for_excel = pd.read_hdf(
+        hdf_name_results, key="complete_dataset", iterator=True, chunksize=1000000
+    )
 
-    for idx, idx_part in enumerate(idx_parts, start=1):
-        savename = "{}_bold_results_part_{}.xlsx".format(fasta_name, idx)
-        complete_dataset.iloc[idx_part].to_excel(
-            project_path.joinpath(savename), index=False
-        )
-
-    return complete_dataset
-
-
-# function to clean the dataset (remove number, special chars)
-def clean_dataset(dataset: object) -> object:
-    """Funtion to clean the downloaded dataset. Removes names with special characters and numbers
-
-    Args:
-        dataset (object): The complete dataset as a dataframe.
-
-    Returns:
-        object: The cleaned dataset as a dataframe
-    """
-    complete_dataset_clean = dataset.copy()
-
-    # remove punctuation and numbers from the taxonomy
-    # exclude "-" since it can be part of a species name in rare cases
-    # also retains no-matches
-    specials = "".join([char for char in punctuation + digits if char != "-"])
-    levels = ["Phylum", "Class", "Order", "Family", "Genus", "Species"]
-
-    # clean the dataset
-    for level in levels:
-        complete_dataset_clean[level] = np.where(
-            complete_dataset_clean[level].str.contains("[{}]".format(specials)),
-            np.nan,
-            complete_dataset_clean[level],
-        )
-
-    # return the cleaned dataset
-    return complete_dataset_clean
+    # disable url writintg to supress user warning
+    for idx, chunk in enumerate(dataset_for_excel, start=1):
+        savename = f"{fasta_name}_bold_results_part_{idx}.xlsx"
+        chunk.to_excel(project_path.joinpath(savename), engine="openpyxl", index=False)
 
 
 # accepts a dataframe for any individual id
@@ -448,6 +496,54 @@ def save_results(project_directory: str, fasta_name: str, all_top_hits: object) 
     all_top_hits.to_parquet(savename_parquet)
 
 
+def gather_top_hits(
+    fasta_dict: dict, hdf_name_results: str, thresholds: list
+) -> object:
+    """Function to collect a top hit for each id in the dataset
+
+    Args:
+        fasta_dict (dict): data of the fasta file in a dictionary
+        hdf_name_results (str): name of the hdf store to read the dataset from
+        thresholds (list): list of thresholds for selection of top hit
+
+    Returns:
+        object: pandas dataframe with all top hits
+    """
+    # chunk to fasta dict in blocks of 10.000 seqs --> results in a maximum of 1.000.000 lines reads
+    id_chunk_count = more_itertools.ilen(
+        more_itertools.chunked(fasta_dict.keys(), 10000)
+    )
+    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 10000)
+
+    # gather all top hits here
+    all_top_hits = []
+
+    # loop over the chunks of ids and retrieve them from the hdf store
+    for id_chunk in tqdm(
+        sequence_ids,
+        id_chunk_count,
+        desc=f"Calculating top hits for {id_chunk_count} batches",
+    ):
+        complete_dataset_clean = pd.read_hdf(
+            hdf_name_results, key="complete_dataset", where=f"id in {id_chunk}"
+        )
+
+        # calculate the top hits in chunks
+        for idx in tqdm(complete_dataset_clean["id"].unique(), desc="Processing"):
+            hits_for_id = (
+                complete_dataset_clean.loc[complete_dataset_clean["id"] == idx]
+                .copy()
+                .reset_index(drop=True)
+                .sort_values(by=["pct_identity"], axis=0, ascending=False)
+            )
+
+            all_top_hits.append(find_top_hit(hits_for_id, thresholds))
+
+    all_top_hits = pd.concat(all_top_hits, axis=0).reset_index(drop=True)
+
+    return all_top_hits
+
+
 # main function to run the data sorting and top hit selection
 def main(fasta_path: str, thresholds: list) -> None:
     """Main function to run data sorting and top hit selection of the downloaded data from BOLD.
@@ -478,32 +574,25 @@ def main(fasta_path: str, thresholds: list) -> None:
         )
     )
 
+    # remove the complete dataset key before starting: if boldigger crashes while sorting, the sorting will be repeated
+    # failsafe against incomplete sorting / combining actions
+    # in the first try there is no complete dataset key, so nothing has to be done
+    try:
+        with pd.HDFStore(hdf_name_results) as store:
+            store.remove("/complete_dataset")
+    except KeyError:
+        pass
+
     # combine downloaded data and additional data
-    complete_dataset = combine_and_sort(
-        hdf_name_results, fasta_dict, fasta_name, project_directory
+    combine_and_sort(hdf_name_results, fasta_dict, fasta_name, project_directory)
+
+    # user output
+    tqdm.write(
+        "{}: Calculating top hits.".format(datetime.datetime.now().strftime("%H:%M:%S"))
     )
 
-    # clean the dataset prior to the calculation of the top hits
-    complete_dataset_clean = clean_dataset(complete_dataset)
-
-    # gather the top hits here
-    all_top_hits = []
-
-    # Calculate the top hits
-    for idx in tqdm(complete_dataset_clean["id"].unique(), desc="Calculating top hits"):
-        # select only the respective id
-        hits_for_id = (
-            complete_dataset_clean.loc[complete_dataset_clean["id"] == idx]
-            .copy()
-            .reset_index(drop=True)
-            .sort_values(by=["pct_identity"], axis=0, ascending=False)
-        )
-
-        # find the top hit
-        all_top_hits.append(find_top_hit(hits_for_id, thresholds))
-
-    # concat all top hits
-    all_top_hits = pd.concat(all_top_hits, axis=0).reset_index(drop=True)
+    # collect the top hits
+    all_top_hits = gather_top_hits(fasta_dict, hdf_name_results, thresholds)
 
     # Save top hits in parquet and excel
     tqdm.write(
