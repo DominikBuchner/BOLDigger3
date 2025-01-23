@@ -222,7 +222,12 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 # fetch the result and build result urls from it, if malformed JSON is returned, skip the request and try in a second round of download
                 try:
                     result = json.loads(response.text)
-                except json.decoder.JSONDecoderError:
+                except json.decoder.JSONDecodeError:
+                    tqdm.write(
+                        "{}: Malformed response, requeuing sequences.".format(
+                            datetime.datetime.now().strftime("%H:%M:%S")
+                        )
+                    )
                     continue
                 result_url = "https://id.boldsystems.org/processing/{}".format(
                     result["sub_id"]
