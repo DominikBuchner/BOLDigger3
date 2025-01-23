@@ -219,8 +219,11 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 # submit the post request
                 response = session.post(base_url, params=params, files=files)
 
-                # fetch the result and build result urls from it
-                result = json.loads(response.text)
+                # fetch the result and build result urls from it, if malformed JSON is returned, skip the request and try in a second round of download
+                try:
+                    result = json.loads(response.text)
+                except json.decoder.JSONDecoderError:
+                    continue
                 result_url = "https://id.boldsystems.org/processing/{}".format(
                     result["sub_id"]
                 )
