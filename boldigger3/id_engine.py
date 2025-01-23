@@ -219,15 +219,14 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 # submit the post request
                 response = session.post(base_url, params=params, files=files)
 
+                # add a random wait to not overload the id engine
+                time.sleep(random.randrange(20))
+
                 # fetch the result and build result urls from it, if malformed JSON is returned, skip the request and try in a second round of download
                 try:
                     result = json.loads(response.text)
                 except json.decoder.JSONDecodeError:
-                    tqdm.write(
-                        "{}: Malformed response, requeuing sequences.".format(
-                            datetime.datetime.now().strftime("%H:%M:%S")
-                        )
-                    )
+                    pbar.update(len(data.split(">")) - 1)
                     continue
                 result_url = "https://id.boldsystems.org/processing/{}".format(
                     result["sub_id"]
