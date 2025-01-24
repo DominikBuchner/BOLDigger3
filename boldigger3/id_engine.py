@@ -220,7 +220,7 @@ def build_post_requests(fasta_dict: dict, base_url: str, params: dict) -> list:
                 response = session.post(base_url, params=params, files=files)
 
                 # add a random wait to not overload the id engine
-                time.sleep(random.randrange(20))
+                time.sleep(random.randrange(30))
 
                 # fetch the result and build result urls from it, if malformed JSON is returned, skip the request and try in a second round of download
                 try:
@@ -400,13 +400,13 @@ def download_json(
                     url = random.choice(results_urls)
                     try:
                         # open it with the browser to check if results are visible
-                        page.goto(url, timeout=60000)
+                        page.goto(url, timeout=600000)
                     except TimeoutError:
                         continue
 
                     # try to find the jsonlResults selector
                     try:
-                        page.wait_for_selector("#jsonlResults", timeout=60000)
+                        page.wait_for_selector("#jsonlResults", timeout=600000)
 
                         download_url = page.query_selector(
                             "#jsonlResults"
