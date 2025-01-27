@@ -637,6 +637,3 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                     # finally remove the download queue
                     os.remove(download_queue_name)
                     break
-
-
-main("C:\\Users\\Dominik\\Documents\\GitHub\\BOLDigger3\\tests\\test_5000.fasta", 3, 3)
