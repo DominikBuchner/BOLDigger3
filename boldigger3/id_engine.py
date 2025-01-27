@@ -574,9 +574,9 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         while True:
             try:
                 if download_queue["waiting"] or download_queue["active"]:
-                    # as long as there are not 7 active requests in the download queue
+                    # as long as there are not 5 active requests in the download queue
                     # move on request from the waiting queue to the active queue
-                    if len(download_queue["active"]) < 7 and download_queue["waiting"]:
+                    if len(download_queue["active"]) < 5 and download_queue["waiting"]:
                         # retrieve one request from the waiting queue
                         request_id, current_request_object = download_queue[
                             "waiting"
