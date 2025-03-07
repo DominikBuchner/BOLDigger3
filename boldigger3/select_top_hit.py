@@ -208,6 +208,9 @@ def get_threshold(hit_for_id: object, thresholds: list) -> object:
             return thresholds[2], "Family"
         elif threshold >= thresholds[3]:
             return thresholds[3], "Order"
+        # used for default thresholds --> if no hit matches the defined threshold levels, it's also a no-match
+        else:
+            return 0, "no-match"
 
 
 ## function to move the treshold one level up if no hit is found, also return the new tax level
