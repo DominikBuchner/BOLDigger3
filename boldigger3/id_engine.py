@@ -10,6 +10,7 @@ from playwright.sync_api import sync_playwright
 from playwright._impl._errors import TimeoutError
 from collections import OrderedDict
 from boldigger3.exceptions import DownloadFinished
+from json.decoder import JSONDecodeError
 
 
 class BoldIdRequest:
@@ -278,13 +279,25 @@ def build_post_request(BoldIdRequest: object) -> object:
         # generate the files to send via the id engine
         files = {"file": ("submitted.fas", data, "text/plain")}
 
-        # submit the post request
-        response = session.post(
-            BoldIdRequest.base_url, params=BoldIdRequest.params, files=files
-        )
+        while True:
+            try:
+                # submit the post request
+                response = session.post(
+                    BoldIdRequest.base_url, params=BoldIdRequest.params, files=files
+                )
 
-        # fetch the result
-        result = json.loads(response.text)
+                # fetch the result
+                result = json.loads(response.text)
+                break
+            except JSONDecodeError:
+                # user output
+                tqdm.write(
+                    "{}: Building the request failed. Waiting 60 seconds for repeat.".format(
+                        datetime.datetime.now().strftime("%H:%M:%S")
+                    )
+                )
+                # wait 60 seconds
+                time.sleep(60)
 
         result_url = "https://id.boldsystems.org/processing/{}".format(result["sub_id"])
 
