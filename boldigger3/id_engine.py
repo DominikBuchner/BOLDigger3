@@ -442,13 +442,13 @@ def download_json(
                     url = active_queue[key].result_url
                     try:
                         # open the url with the browser to check if the results are fully loaded
-                        page.goto(url, timeout=10000)
+                        page.goto(url, timeout=20000)
                     except TimeoutError:
                         continue
 
                     # try to find the jsonlResults selector
                     try:
-                        page.wait_for_selector("#jsonlResults", timeout=10000)
+                        page.wait_for_selector("#jsonlResults", timeout=20000)
 
                         download_url = page.query_selector(
                             "#jsonlResults"
