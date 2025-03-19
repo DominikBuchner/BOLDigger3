@@ -442,13 +442,13 @@ def download_json(
                     url = active_queue[key].result_url
                     try:
                         # open the url with the browser to check if the results are fully loaded
-                        page.goto(url, timeout=15000)
+                        page.goto(url, timeout=10000)
                     except TimeoutError:
                         continue
 
                     # try to find the jsonlResults selector
                     try:
-                        page.wait_for_selector("#jsonlResults", timeout=15000)
+                        page.wait_for_selector("#jsonlResults", timeout=10000)
 
                         download_url = page.query_selector(
                             "#jsonlResults"
@@ -575,7 +575,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                 if download_queue["waiting"] or download_queue["active"]:
                     # as long as there are not 5 active requests in the download queue
                     # move on request from the waiting queue to the active queue
-                    if len(download_queue["active"]) < 5 and download_queue["waiting"]:
+                    if len(download_queue["active"]) < 4 and download_queue["waiting"]:
                         # retrieve one request from the waiting queue
                         request_id, current_request_object = download_queue[
                             "waiting"
