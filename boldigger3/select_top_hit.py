@@ -86,13 +86,29 @@ def combine_and_sort(
         object: Dataframe with combined data.
     """
     # chunk to fasta dict in blocks of 10.000 seqs --> results in a maximum of 1.000.000 lines reads
-    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 2000)
+    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 10000)
 
     # loop over the chunks of ids and retrieve them from the hdf store
     for id_chunk in sequence_ids:
-        unsorted_results = pd.read_hdf(
-            hdf_name_results, key="results_unsorted", where=f"id in {id_chunk}"
-        ).reset_index(drop=True)
+        # collect the chunks of the unsorted results here
+        unsorted_results = []
+
+        # create an iterator over the hdf store to not load it into memory
+        hdf_iterator = pd.read_hdf(
+            hdf_name_results,
+            key="results_unsorted",
+            where=f"id in {tuple(id_chunk)}",
+            chunksize=1000000,
+        )
+
+        # collect the unsorted results from the iterator
+        for chunk in hdf_iterator:
+            unsorted_results.append(chunk)
+
+        # prepare the unsorted results for this chunk of sequence ids
+        unsorted_results = pd.concat(unsorted_results, ignore_index=True).reset_index(
+            drop=True
+        )
 
         # extract the process ids to collect from the additional data
         process_ids_to_retrieve = unsorted_results["process_id"]
