@@ -86,7 +86,7 @@ def combine_and_sort(
         object: Dataframe with combined data.
     """
     # chunk to fasta dict in blocks of 10.000 seqs --> results in a maximum of 1.000.000 lines reads
-    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 10000)
+    sequence_ids = more_itertools.chunked(fasta_dict.keys(), 2000)
 
     # loop over the chunks of ids and retrieve them from the hdf store
     for id_chunk in sequence_ids:
