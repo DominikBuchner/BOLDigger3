@@ -1,7 +1,6 @@
-import argparse, sys, datetime, time
+import argparse, sys, datetime, time, luddite
 from boldigger3 import id_engine, additional_data_download, select_top_hit
 from importlib.metadata import version
-from get_pypi_latest_version import GetPyPiLatestVersion
 
 
 # main function to program the commandline interface
@@ -64,8 +63,7 @@ def main() -> None:
     # add version control
     # get the installed version
     current_version = version("boldigger3")
-    obtainer = GetPyPiLatestVersion()
-    latest_version = obtainer("boldigger3")
+    latest_version = luddite.get_version_pypi("boldigger3")
 
     # give a user warning if the latest version is not installed
     if current_version != latest_version:
