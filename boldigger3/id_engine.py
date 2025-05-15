@@ -186,7 +186,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
     idx_to_operating_mode = {
         1: {"mi": 0.94, "maxh": 25},
         2: {"mi": 0.9, "maxh": 50},
-        3: {"mi": 0.85, "maxh": 100},
+        3: {"mi": 0.75, "maxh": 100},
     }
 
     # params can be calculated from the database and operating mode
