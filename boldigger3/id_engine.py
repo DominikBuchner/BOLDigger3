@@ -226,7 +226,7 @@ def build_download_queue(
     base_url, params = build_url_params(database, operating_mode)
 
     # determine the query size from the params
-    query_size_dict = {0.94: 1000, 0.9: 200, 0.85: 100}
+    query_size_dict = {0.94: 1000, 0.9: 200, 0.75: 100}
     query_size = query_size_dict[params["mi"]]
 
     # split the fasta dict in query sized chunks
