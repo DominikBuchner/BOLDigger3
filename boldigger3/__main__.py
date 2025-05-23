@@ -85,10 +85,10 @@ def main() -> None:
         sys.exit()
 
     # only use the threshold provided by the user replace the rest with defaults
-    default_thresholds = [97, 95, 90, 85]
+    default_thresholds = [97, 95, 90, 85, 75]
     thresholds = []
 
-    for i in range(4):
+    for i in range(5):
         try:
             thresholds.append(arguments.thresholds[i])
         except (IndexError, TypeError):

@@ -39,7 +39,7 @@ def sort_by_input_order(fasta_dict: dict, dataset_df: object) -> object:
     return dataset_df
 
 
-# function to clean the dataset (remove number, special chars)
+# function to clean the dataset (remove numbers, special chars)
 def clean_dataset(dataset_df: object) -> object:
     """Funtion to clean the a chunk of the downloaded dataset. Removes names with special characters and numbers
 
@@ -224,6 +224,8 @@ def get_threshold(hit_for_id: object, thresholds: list) -> object:
             return thresholds[2], "Family"
         elif threshold >= thresholds[3]:
             return thresholds[3], "Order"
+        elif threshold >= thresholds[4]:
+            return thresholds[4], "Class"
         # used for default thresholds --> if no hit matches the defined threshold levels, it's also a no-match
         else:
             return 0, "no-match"
@@ -241,7 +243,7 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
     Returns:
         tuple: (new_threshold, thresholds)
     """
-    levels = ["Species", "Genus", "Family", "Order"]
+    levels = ["Species", "Genus", "Family", "Order", "Class"]
 
     return (
         thresholds[thresholds.index(threshold) + 1],
