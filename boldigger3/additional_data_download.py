@@ -357,7 +357,7 @@ def main(fasta_path: str) -> None:
             )
             # requests the additional data asynchronously in batches of 10000 urls
             # limit the concurrent requests to 50
-            semaphore = asyncio.Semaphore(50)
+            semaphore = asyncio.Semaphore(10)
 
             # gather the responses
             response = asyncio.run(as_session(chunk, semaphore))
