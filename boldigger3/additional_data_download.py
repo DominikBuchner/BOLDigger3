@@ -221,7 +221,7 @@ async def as_session(download_urls, semaphore) -> list:
     # only retry if the page failed to load
     retry_strategy = Retry(
         total=5,
-        status_forcelist=[500, 502, 504],
+        status_forcelist=[500, 502, 503, 504],
         backoff_factor=2,
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
