@@ -1,5 +1,6 @@
-import argparse, sys, datetime, time, luddite
-from boldigger3 import id_engine, additional_data_download, select_top_hit
+import argparse, sys, datetime, luddite
+from boldigger3 import id_engine
+from boldigger3 import metadata_download
 from importlib.metadata import version
 
 
@@ -106,16 +107,19 @@ def main() -> None:
 
     # run the identification engine
     if arguments.function == "identify":
+        # download the current metadata from BOLD
+        metadata_download.main()
+
         # run the id engine
-        id_engine.main(
-            arguments.fasta_file,
-            database=arguments.db,
-            operating_mode=arguments.mode,
-        )
-        # download the additional data
-        additional_data_download.main(arguments.fasta_file)
+        # id_engine.main(
+        #     arguments.fasta_file,
+        #     database=arguments.db,
+        #     operating_mode=arguments.mode,
+        # )
+
+        # add additional data via the metadata
+
         # select the top hit
-        select_top_hit.main(arguments.fasta_file, thresholds=thresholds)
 
 
 # run only if called as a top level script

@@ -1,4 +1,4 @@
-import datetime, sys, time, random, more_itertools, requests_html_playwright, json, gzip, pickle, os
+import datetime, sys, time, more_itertools, requests_html_playwright, json, gzip, pickle, os
 import numpy as np
 import pandas as pd
 from tqdm import tqdm

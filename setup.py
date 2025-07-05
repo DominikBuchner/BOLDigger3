@@ -16,11 +16,10 @@ setuptools.setup(
     license="MIT",
     install_requires=[
         "beautifulsoup4>=4.12.3",
-        "Bio>=1.7.1",
         "biopython>=1.84",
         "luddite>=1.0.4",
         "more_itertools>=10.5.0",
-        "numpy>=1.24.0, <2.0.0",
+        "numpy>=2.0.0",
         "pandas>=2.2.3",
         "playwright>=1.48.0",
         "Requests>=2.32.3",

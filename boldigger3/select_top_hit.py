@@ -1,4 +1,4 @@
-import datetime, more_itertools, sys
+import datetime, more_itertools
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
