@@ -1,4 +1,4 @@
-import importlib.util, datetime, getpass
+import importlib.util, datetime, tarfile, json
 from pathlib import Path
 import requests_html_playwright
 from dateutil.parser import parse
@@ -40,14 +40,14 @@ def check_database():
         # delete old database if neccessary
         if output_path.is_file():
             print(
-                "{}: Database is up to date. ".format(
+                "{}: Data package is up to date. ".format(
                     datetime.datetime.now().strftime("%H:%M:%S")
                 )
             )
             return False, "", output_path
         else:
             print(
-                "{}: Database is outdated. Current release is {}. ".format(
+                "{}: Data package is outdated. Current release is {}. ".format(
                     datetime.datetime.now().strftime("%H:%M:%S"),
                     package_date.strftime("%Y-%m-%d"),
                 )
@@ -80,6 +80,10 @@ def download_url(url, output_path):
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 
 
+def database_to_duckdb(output_path):
+    pass
+
+
 def main():
     print(
         "{}: Welcome to BOLDigger3. ".format(
@@ -89,7 +93,7 @@ def main():
 
     # give user output, ask for credentials
     print(
-        "{}: Checking database availability.".format(
+        "{}: Checking data package availability.".format(
             datetime.datetime.now().strftime("%H:%M:%S")
         )
     )
@@ -100,3 +104,12 @@ def main():
     # update the database if needed
     if downloaded_needed:
         download_url(url, output_path)
+        # transform to duck db
+
+    # give user output, ask for credentials
+    print(
+        "{}: Compiling database, this will take a while.".format(
+            datetime.datetime.now().strftime("%H:%M:%S")
+        )
+    )
+    database_to_duckdb(output_path)
