@@ -141,6 +141,7 @@ def database_to_duckdb(output_path):
             if item.is_file():
                 item.unlink()
         extract_path.rmdir()
+        output_path.unlink()
 
         write_version_file()
 
