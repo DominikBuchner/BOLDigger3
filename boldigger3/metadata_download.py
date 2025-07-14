@@ -191,20 +191,10 @@ def database_to_duckdb(output_path: str, package_date: str):
         e: _description_
     """
     db_path = str(output_path).replace(".tar.gz", ".duckdb")
-    table_name = "bold_public"   #@Dominik this is an unused variable here, is there an intended use? :D
+    table_name = "bold_public"
     extract_path = Path(output_path).with_suffix("")
 
-
-    # @ Manan: I see you catch every exception here. Is there a more elegant solution to this? I do not see any reason
-    # that the duckdb stream fails except KeyBoardInterrupt.
-    #
-    # actually there are multiple exceptions that can be thorn other than KeyBoardInterrupt
-    # since we are doing not just streaming but also extracting and accessing, so there can be exceptions like:
-    # FileNotFoundError, tarfile.ReadError, PermissionError -> in case of partial download or insufficient permissions to the folders,
-    # then KeyError ->incase a key is removed or changed in future versions of the BoldDB,
-    # or even "duckdb.Error" or something similar -> related to DuckDB in that case knowing the exception for trying to fix it is probably important.
-    # and if the exception is printed then maybe it could be fixed as well,
-    # but in any case the half/downloaded extracted loaded data should be deleted hence I left it as any exception.
+    # stream data to duckdb
     try:
         if (
             not extract_path.exists()
@@ -215,7 +205,6 @@ def database_to_duckdb(output_path: str, package_date: str):
             with tarfile.open(output_path, "r:gz") as tar:
                 tar.extractall(path=extract_path)
         else:
-            # @ Manan:Is there any case (except testing) where this actually happens? I think it could be removed
             print(
                 f"{datetime.datetime.now():%H:%M:%S}: Extracted files already exist, skipping extraction."
             )
@@ -249,7 +238,7 @@ def database_to_duckdb(output_path: str, package_date: str):
         # stream the data to duck db
         con.execute(
             f"""
-            CREATE TABLE bold_public AS
+            CREATE TABLE {table_name} AS
                     SELECT {columns_def}
                     FROM read_csv_auto('{tsv_path}', delim='\t', header=True)
             """
@@ -272,10 +261,6 @@ def database_to_duckdb(output_path: str, package_date: str):
         # write the version file with the current package date.
         write_version_file(package_date)
 
-    # @ Manan Maybe just catch KeyBoardInterrupt and then adjust code for specific errors users might encounter instead just catching everything?
-    # Reply:
-    # catching everything at once because in any case the end result would be to remove half downloaded files or extracted files and retry.
-    # Or to report it to Devs like us to fix, where it would be useful to know the exception. :D
     except Exception as e:
         print("Error occurred during database creation:", e)
         if Path(db_path).exists():
