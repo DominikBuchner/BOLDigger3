@@ -1,11 +1,28 @@
-import importlib.util, datetime, sys
+import importlib.util, datetime
 from pathlib import Path
 import requests_html
 from dateutil.parser import parse
 from tqdm import tqdm
 import urllib.request
-import duckdb, tarfile, json, os
-import pandas as pd
+import duckdb, tarfile, json
+
+# only select these columns from tsv
+# SELECTED_COLUMNS was left outside and on the top as global variable so that incase you need to access it from some other
+# script in the package to check weather a field is added to the db before accessing it and retrieving it for example.
+# and if you still prefer to keep it as local variable then the name should be probably changed to lowercase since all caps
+# variable names are preferably reserved for global in python as a way to distinguish.
+SELECTED_COLUMNS = [
+    "processid",
+    "sex",
+    "life_stage",
+    "inst",
+    "country/ocean",
+    "identified_by",
+    "identification_method",
+    "coord",
+    "nuc",
+    "marker_code",
+]
 
 
 # class to generate a download progress bar with tqdm
@@ -174,24 +191,20 @@ def database_to_duckdb(output_path: str, package_date: str):
         e: _description_
     """
     db_path = str(output_path).replace(".tar.gz", ".duckdb")
-    table_name = "bold_public"
+    table_name = "bold_public"   #@Dominik this is an unused variable here, is there an intended use? :D
     extract_path = Path(output_path).with_suffix("")
 
-    # only select these columns from tsv
-    SELECTED_COLUMNS = [
-        "processid",
-        "sex",
-        "life_stage",
-        "inst",
-        "country/ocean",
-        "identified_by",
-        "identification_method",
-        "coord",
-        "nuc",
-        "marker_code",
-    ]
+
     # @ Manan: I see you catch every exception here. Is there a more elegant solution to this? I do not see any reason
     # that the duckdb stream fails except KeyBoardInterrupt.
+    #
+    # actually there are multiple exceptions that can be thorn other than KeyBoardInterrupt
+    # since we are doing not just streaming but also extracting and accessing, so there can be exceptions like:
+    # FileNotFoundError, tarfile.ReadError, PermissionError -> in case of partial download or insufficient permissions to the folders,
+    # then KeyError ->incase a key is removed or changed in future versions of the BoldDB,
+    # or even "duckdb.Error" or something similar -> related to DuckDB in that case knowing the exception for trying to fix it is probably important.
+    # and if the exception is printed then maybe it could be fixed as well,
+    # but in any case the half/downloaded extracted loaded data should be deleted hence I left it as any exception.
     try:
         if (
             not extract_path.exists()
@@ -211,6 +224,7 @@ def database_to_duckdb(output_path: str, package_date: str):
         tsv_path = next(extract_path.glob("*.tsv"))
 
         # load and parse the json data
+        print(f"{datetime.datetime.now():%H:%M:%S}: Identifying data to be collected.")
         with open(json_path) as f:
             metadata = json.load(f)
 
@@ -223,6 +237,7 @@ def database_to_duckdb(output_path: str, package_date: str):
 
         # stream data to duck db with duck db csv reader
         # open the connection
+        print(f"{datetime.datetime.now():%H:%M:%S}: Adding data to duckdb table.")
         con = duckdb.connect(db_path)
 
         # define the columns
@@ -258,6 +273,9 @@ def database_to_duckdb(output_path: str, package_date: str):
         write_version_file(package_date)
 
     # @ Manan Maybe just catch KeyBoardInterrupt and then adjust code for specific errors users might encounter instead just catching everything?
+    # Reply:
+    # catching everything at once because in any case the end result would be to remove half downloaded files or extracted files and retry.
+    # Or to report it to Devs like us to fix, where it would be useful to know the exception. :D
     except Exception as e:
         print("Error occurred during database creation:", e)
         if Path(db_path).exists():
