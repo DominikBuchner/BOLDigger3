@@ -1,14 +1,11 @@
-import datetime, sys, time, more_itertools, requests_html_playwright, json, gzip, pickle, os
-import numpy as np
+import datetime, duckdb, sys, pickle, more_itertools, requests_html, json, time, os, ijson
 import pandas as pd
-from tqdm import tqdm
-from pathlib import Path
 from Bio import SeqIO
+from pathlib import Path
+from tqdm import tqdm
+from collections import OrderedDict
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from playwright.sync_api import sync_playwright
-from playwright._impl._errors import TimeoutError
-from collections import OrderedDict
 from boldigger3.exceptions import DownloadFinished
 from json.decoder import JSONDecodeError
 
@@ -30,9 +27,7 @@ class BoldIdRequest:
         # query_generator: object,
         # timestamp: object,
         # result_url: str,
-        # queued: int,
-        # processing: int,
-        # completed: int,
+        # last_checked: object
     ):
         """Constructs the neccessary attribues for the BoldIdRequest object
 
@@ -42,9 +37,8 @@ class BoldIdRequest:
             query_generator (object): A generator holding the data to send with the post request
             timestamp (object): Timestamp that is set when the request is sent to BOLD
             result_url (str): The result url to download the data from
-            queued (int): Queries that are queued
-            processing (int): Queries that are processing
-            completed (int): Queries that are completed
+            last_checked (object): The last time the download url was checked for updates
+
         """
         self.base_url = ""
         self.params = {}
@@ -54,12 +48,9 @@ class BoldIdRequest:
         self.database = None
         self.operating_mode = None
         self.download_url = ""
-        self.queued = ""
-        self.processing = ""
-        self.completed = ""
+        self.last_checked = None
 
 
-# function to read the fasta file to identify into a dictionary
 def parse_fasta(fasta_path: str) -> tuple:
     """Function to read a fasta file and parse it into a dictionary.
 
@@ -107,9 +98,7 @@ def parse_fasta(fasta_path: str) -> tuple:
     for key in fasta_dict.keys():
         if not set(fasta_dict[key].seq.upper()).issubset(valid_chars):
             print(
-                "{}: Sequence {} contains invalid characters.".format(
-                    datetime.datetime.now().strftime("%H:%M:%S"), key
-                )
+                f"{datetime.datetime.now().strftime('%H:%M:%S')}: Sequence {key} contains invalid characters."
             )
             raise_invalid_fasta = True
 
@@ -119,46 +108,40 @@ def parse_fasta(fasta_path: str) -> tuple:
         sys.exit()
 
 
-# function to check is some of the sequences have already been downloaded
-def already_downloaded(fasta_dict: dict, hdf_name_results: str) -> dict:
-    """Funtion to check if any of the sequences have already been downloaded.
+def already_downloaded(fasta_dict: dict, database_path: str) -> dict:
+    """Function to check if any of the requests has been downloaded and stored in the duckdb database.
 
     Args:
         fasta_dict (dict): The dictionary with the fasta data.
-        hdf_name_results (str): The savename of the hdf data storage.
+        database_path (str): Path to the duckdb database
 
     Returns:
         dict: The dictionary with the fasta data with already downloaded sequences removed.
     """
-    # try to open the hdf file
-    try:
-        # only collect the ids from the hdf as and iterator
-        idx_data = pd.read_hdf(
-            hdf_name_results,
-            key="results_unsorted",
-            columns=["id"],
-            iterator=True,
-            chunksize=1000000,
-        )
+    if database_path.is_file():
+        # connect to the database
+        database = duckdb.connect(database_path)
 
-        # define the idx set to collect from hdf
-        idx = set()
+        # collect all unique values from the id column
+        downloaded_ids = database.execute(
+            "SELECT DISTINCT id FROM id_engine_results"
+        ).fetchall()
 
-        # loop over the chunks and collect the ids
-        for chunk in idx_data:
-            idx = idx.union(set(chunk["id"].to_list()))
+        # flatten the downloaded ids into a set for faster lookup
+        downloaded_ids = {row[0] for row in downloaded_ids}
 
-        # remove those ids from the fasta dict
-        fasta_dict = {id: seq for (id, seq) in fasta_dict.items() if id not in idx}
+        # filter the fasta_dict
+        fasta_dict = {
+            id: seq for (id, seq) in fasta_dict.items() if id not in downloaded_ids
+        }
 
-        # return the updated fasta dict
+        # return the updated dict
         return fasta_dict
-    except FileNotFoundError:
+    else:
         # return the fasta dict unchanged
         return fasta_dict
 
 
-# function to build the base urls and params
 def build_url_params(database: int, operating_mode: int) -> tuple:
     """Function that generates a base URL and the params for the POST request to the ID engine.
 
@@ -199,17 +182,12 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
     }
 
     # format the base url
-    base_url = "https://id.boldsystems.org/submission?db={}&mi={}&mo={}&maxh={}&order={}".format(
-        params["db"], params["mi"], params["mo"], params["maxh"], params["order"]
-    )
+    base_url = f"https://id.boldsystems.org/submission?db={params['db']}&mi={params['mi']}&mo={params['mo']}&maxh={params['maxh']}&order={params['order']}"
 
     return base_url, params
 
 
-# function to build the download queue
-def build_download_queue(
-    fasta_dict: dict, download_queue_name: str, database: int, operating_mode: int
-) -> None:
+def build_download_queue(fasta_dict: dict, database: int, operating_mode: int) -> dict:
     """Function to build the download queue.
 
     Args:
@@ -217,6 +195,9 @@ def build_download_queue(
         download_queue_name (str): String that holds the path where the download queue is saved.
         database (int): Between 1 and 7 referring to the database, see readme for details.
         operating_mode (int): Between 1 and 3 referring to the operating mode, see readme for details
+
+    Returns:
+        dict: The dictionary with the downloaded queue
 
     """
     # initialize the download queue
@@ -234,7 +215,7 @@ def build_download_queue(
 
     # produce a generator that holds all sequence and key data to loop over for the post requests
     query_generators = (
-        [">{}\n{}\n".format(key, fasta_dict[key].seq) for key in query_subset]
+        [f">{key}\n{fasta_dict[key].seq}\n" for key in query_subset]
         for query_subset in query_data
     )
 
@@ -251,7 +232,6 @@ def build_download_queue(
     return download_queue
 
 
-# function to send a post request to the BOLD id engine
 def build_post_request(BoldIdRequest: object) -> object:
     """Function to send the POST request for the dataset to the BOLD id engine.
 
@@ -262,7 +242,7 @@ def build_post_request(BoldIdRequest: object) -> object:
         object: Returns the BoldIdRequest object with an added result url
     """
     # send the post requests
-    with requests_html_playwright.HTMLSession() as session:
+    with requests_html.HTMLSession() as session:
 
         # build a retry strategy for the html session
         session.headers.update(
@@ -292,223 +272,144 @@ def build_post_request(BoldIdRequest: object) -> object:
             except JSONDecodeError:
                 # user output
                 tqdm.write(
-                    "{}: Building the request failed. Waiting 60 seconds for repeat.".format(
-                        datetime.datetime.now().strftime("%H:%M:%S")
-                    )
+                    f"{datetime.datetime.now().strftime('%H:%M:%S')}: Building the request failed. Waiting 60 seconds for repeat."
                 )
                 # wait 60 seconds
                 time.sleep(60)
 
-        result_url = "https://id.boldsystems.org/processing/{}".format(result["sub_id"])
+        result_url = f"https://id.boldsystems.org/submission/results/{result['sub_id']}"
 
         # append the resulting url
         BoldIdRequest.result_url = result_url
         BoldIdRequest.timestamp = datetime.datetime.now()
 
-        # return the BoldIDRequest object
         return BoldIdRequest
 
 
-def download_and_parse(
+def parse_and_save_data(
     BoldIdRequest: object,
-    hdf_name_results: str,
-    html_session: object,
-) -> None:
-    """This function downloads and parses the JSON from the result urls and stores it in the hdf storage
-
-    Args:
-        BoldIdRequest (object): BoldIdRequest object that holds all the data of the current request
-        hdf_name_results_str (str): Name of the hdf storage to write to.
-        html_session (object): session object to perform the download.
-    """
-    response = html_session.get(BoldIdRequest.download_url)
-    response = gzip.decompress(response.content)
-    content_str = response.decode("utf-8")
-
-    # store the output dataframe here
-    output_dataframe = pd.DataFrame()
-
-    for json_record in content_str.splitlines():
-        # save the results here
-        json_record_results = []
-
-        json_record = json.loads(json_record)
-        # extract the sequence id first
-        sequence_id = json_record["seqid"]
-
-        # extract the results for this seq id
-        results = json_record.get("results")
-
-        # only parse if results are not empty
-        if results:
-            # the keys of the results are the process id|primer|bin_uri|x|x
-            for key in results.keys():
-                process_id, bin_uri = key.split("|")[0], key.split("|")[2]
-                pident = results[key].get("pident", np.nan)
-                # extract the taxonomy
-                taxonomy = results.get(key).get("taxonomy", {})
-                taxonomy = [
-                    taxonomy.get(taxonomic_level)
-                    for taxonomic_level in [
-                        "phylum",
-                        "class",
-                        "order",
-                        "family",
-                        "genus",
-                        "species",
-                    ]
-                ]
-
-                json_record_results.append(
-                    taxonomy + [pident] + [process_id] + [bin_uri]
-                )
-        else:
-            json_record_results.append(["no-match"] * 6 + [0] + [""] + [""])
-
-        # transform the record to dataframe to add it to the hdf storage
-        json_record_results = pd.DataFrame(
-            data=json_record_results,
-            columns=[
-                "Phylum",
-                "Class",
-                "Order",
-                "Family",
-                "Genus",
-                "Species",
-                "pct_identity",
-                "process_id",
-                "bin_uri",
-            ],
-        )
-
-        # add the sequence id and the timestamp
-        json_record_results.insert(0, column="id", value=sequence_id)
-        json_record_results["request_date"] = pd.Timestamp.now().strftime("%Y-%m-%d %X")
-        json_record_results["pct_identity"] = json_record_results[
-            "pct_identity"
-        ].astype("float64")
-
-        # add the database and the operating mode
-        json_record_results["database"] = BoldIdRequest.database
-        json_record_results["operating_mode"] = BoldIdRequest.operating_mode
-
-        # fill emtpy values with strings to make compatible with hdf
-        json_record_results.fillna("")
-
-        # append to the output dataframe
-        output_dataframe = pd.concat([output_dataframe, json_record_results], axis=0)
-
-    # add the results to the hdf storage
-    # set size limits for the columns
-    item_sizes = {
-        "id": 100,
-        "Phylum": 80,
-        "Class": 80,
-        "Order": 80,
-        "Family": 80,
-        "Genus": 80,
-        "Species": 80,
-        "process_id": 25,
-        "bin_uri": 25,
-        "request_date": 30,
-        "database": 5,
-        "operating_mode": 5,
-    }
-
-    with pd.HDFStore(
-        hdf_name_results, mode="a", complib="blosc:blosclz", complevel=9
-    ) as hdf_output:
-        hdf_output.append(
-            key="results_unsorted",
-            value=output_dataframe,
-            format="t",
-            data_columns=True,
-            min_itemsize=item_sizes,
-            complib="blosc:blosclz",
-            complevel=9,
-        )
-
-
-def download_json(
-    active_queue: dict,
-    hdf_name_results: str,
+    response: object,
+    fasta_order: dict,
+    request_id: int,
+    database_path: str,
 ):
-    """Function to download JSON results from the id engine and store it in hdf format
+    # parse out all objects from the response
+    json_objects = ijson.items(response.text, "", multiple_values=True)
+    # store the resulting tables rows here when parsing the jsons
+    rows = []
+
+    for result in json_objects:
+        # handle no-matches here
+        if not result["results"]:
+            # TODO NoMatch function
+            pass
+
+        # parse the json
+        seq_id = result["seqid"]
+
+        for record_key, record_data in result["results"].items():
+            record_key = record_key.split("|")
+
+            row = {
+                "id": seq_id,
+                "process_id": record_key[0],
+                "bin_uri": record_key[2],
+                "status": record_key[4],
+                "pct_identity": record_data.get("pident"),
+            }
+
+            taxonomy = record_data.get("taxonomy", {})
+            row.update(taxonomy)
+            rows.append(row)
+
+    # transform to dataframe, drop unused labels, add ordering column, use correct type annotations
+    id_engine_result = pd.DataFrame(rows)
+    id_engine_result = id_engine_result.drop(
+        labels=["subfamily", "taxid_count"], axis=1
+    )
+    id_engine_result["pct_identity"] = id_engine_result["pct_identity"].astype(
+        "float64"
+    )
+    id_engine_result["request_date"] = pd.Timestamp.now().strftime("%Y-%m-%d %X")
+    id_engine_result["database"] = BoldIdRequest.database
+    id_engine_result["operating_mode"] = BoldIdRequest.operating_mode
+    id_engine_result["fasta_order"] = id_engine_result["id"].map(fasta_order)
+
+    # reorder the columns
+    id_engine_result = id_engine_result[
+        [
+            "id",
+            "phylum",
+            "class",
+            "order",
+            "family",
+            "genus",
+            "species",
+            "pct_identity",
+            "process_id",
+            "bin_uri",
+            "request_date",
+            "database",
+            "operating_mode",
+            "status",
+            "fasta_order",
+        ]
+    ]
+
+    # finally stream to parquet to later load into duckdb, update the active queue
+    output_file = database_path.joinpath(
+        "boldigger3_data", f"request_id_{request_id}.parquet.snappy"
+    )
+    id_engine_result.to_parquet(output_file)
+
+
+def download_json(active_queue: dict, fasta_order: dict, project_directory: str):
+    """Function to download the JSON results from the id engine and store them in temporary parquet files.
 
     Args:
-        active_queue (dict): Queue with activebold requests
-        hdf_name_results (str): name of the hdf to save the results to
-        database (int): database that was queried
-        operating_mode (int): operating mode that was used for the BOLD query
-        request_id (int):
+        active_queue (dict): Queue with active BOLD requests.
+        fasta_order (dict): Dict that can be appended to the results. Needed for creating a sorted duckdb table later.
     """
+    # initialize the last check's for the active queue
+    for key in active_queue.keys():
+        if not active_queue[key].last_checked:
+            active_queue[key].last_checked = datetime.datetime.now()
 
-    # start a headless playwright session to render the javascript
-    # no async code needed since waiting for the rendering is required anyways
-    with sync_playwright() as p:
-        with requests_html_playwright.HTMLSession() as session:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            # loop over the active cue until any request is finished.
-            while active_queue:
-                for key in active_queue.keys():
-                    url = active_queue[key].result_url
-                    try:
-                        # open the url with the browser to check if the results are fully loaded
-                        page.goto(url, timeout=20000)
-                    except TimeoutError:
-                        continue
+    # check the requests every ten seconds
+    with requests_html.HTMLSession() as session:
+        # loop over the active queue until any request is finished
+        while active_queue:
+            for key in active_queue.keys():
+                now = datetime.datetime.now()
+                # if the url has not been checked in the last 10 seconds, check again, else skip the url
+                if now - active_queue[key].last_checked > datetime.timedelta(
+                    seconds=10
+                ):
+                    response = session.get(active_queue[key].result_url)
+                else:
+                    continue
+                # if there's no data in the response yet, continue
+                if response.status_code == 404:
+                    active_queue[key].last_checked = datetime.datetime.now()
+                    tqdm.write(
+                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: No data yet for request ID {key}."
+                    )
+                    continue
+                # if timing is sufficient AND data in the response, parse the response
+                else:
+                    # parse the response here and save, update the active queue
+                    parse_and_save_data(
+                        active_queue[key], response, fasta_order, key, project_directory
+                    )
+                    active_queue.pop(key)
 
-                    # try to find the jsonlResults selector
-                    try:
-                        page.wait_for_selector("#jsonlResults", timeout=20000)
+                    # give user output
+                    tqdm.write(
+                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Request ID {key} has successfully be downloaded."
+                    )
 
-                        download_url = page.query_selector(
-                            "#jsonlResults"
-                        ).get_attribute("href")
-                        # add the download url to the BoldRequest object
-                        active_queue[key].download_url = download_url
-                        # parsing and download function here
-                        download_and_parse(active_queue[key], hdf_name_results, session)
-                        # remove the key from the dict
-                        active_queue.pop(key)
-                        # give user output
-                        tqdm.write(
-                            "{}: Request ID {} has successfully been downloaded.".format(
-                                datetime.datetime.now().strftime("%H:%M:%S"), key
-                            )
-                        )
-                        # return the active queue
-                        return active_queue
-                    except TimeoutError:
-                        try:
-                            # give user output and update if it is not found
-                            queued = page.query_selector(
-                                "#progress-queued"
-                            ).text_content()
-                            processing = page.query_selector(
-                                "#progress-processing"
-                            ).text_content()
-                            completed = page.query_selector(
-                                "#progress-completed"
-                            ).text_content()
-                            # add everything to the active cue object
-                            active_queue[key].queued = queued
-                            active_queue[key].processing = processing
-                            active_queue[key].completed = completed
-
-                            # give user output
-                            tqdm.write(
-                                "{}: Status of request ID {}: {}, {}, {}.".format(
-                                    datetime.datetime.now().strftime("%H:%M:%S"),
-                                    key,
-                                    active_queue[key].queued,
-                                    active_queue[key].processing,
-                                    active_queue[key].completed,
-                                )
-                            )
-                        except AttributeError:
-                            continue
+                    # return the active queue
+                    return active_queue
 
 
 def main(fasta_path: str, database: int, operating_mode: int) -> None:
@@ -519,27 +420,29 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         database (int): The database to use. Can be database 1-8, see readme for details.
         operating_mode (int): The operating mode to use. Can be 1-4, see readme for details.
     """
-
     # user output
-    tqdm.write(
-        "{}: Reading input fasta.".format(datetime.datetime.now().strftime("%H:%M:%S"))
-    )
+    tqdm.write(f"{datetime.datetime.now().strftime('%H:%M:%S')}: Reading input fasta.")
 
-    # read the input fasta
+    # read the input fasta into memory
     fasta_dict, fasta_name, project_directory = parse_fasta(fasta_path)
 
-    # generate a new for the hdf storage to store the downloaded data
-    hdf_name_results = project_directory.joinpath(
-        "{}_result_storage.h5.lz".format(fasta_name)
-    )
+    # define the order of the fasta dict, can be used to add an order column in the output
+    fasta_dict_order = {key: idx for idx, key in enumerate(fasta_dict.keys())}
+
+    # define a name for the duckdb database where the downloaded data will be stored
+    database_path = project_directory.joinpath(f"{fasta_name}.duckdb")
 
     # generate a name for the download queue
     download_queue_name = project_directory.joinpath(
         "{}_download_queue.pkl".format(fasta_name)
     )
 
-    # check if any data has been downloaded already
-    fasta_dict = already_downloaded(fasta_dict, hdf_name_results)
+    # generate a data directory to save the data to, so the working directory won't be cluttered
+    data_dir = project_directory.joinpath("boldigger3_data")
+    data_dir.mkdir(exist_ok=True)
+
+    # check if any data has been downloaded yet
+    fasta_dict = already_downloaded(fasta_dict, database_path)
 
     # if all data has already been downloaded return to stop the function
     if not fasta_dict:
@@ -550,6 +453,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         )
         return None
 
+    # try to open an existing download queue first to finish unfinished downloads
     try:
         with open(download_queue_name, "rb") as download_queue_file:
             download_queue = pickle.load(download_queue_file)
@@ -560,15 +464,14 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                 )
             )
     except FileNotFoundError:
-        # build the download queue
+        # if no download queue can be found build it
         tqdm.write(
             "{}: Building the download queue.".format(
                 datetime.datetime.now().strftime("%H:%M:%S")
             )
         )
-        download_queue = build_download_queue(
-            fasta_dict, download_queue_name, database, operating_mode
-        )
+        # build the queue
+        download_queue = build_download_queue(fasta_dict, database, operating_mode)
         with open(download_queue_name, "wb") as download_queue_file:
             pickle.dump(download_queue, download_queue_file)
         tqdm.write(
@@ -581,14 +484,14 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     # calculate the total amounts of downloads
     total_downloads = len(download_queue["waiting"]) + len(download_queue["active"])
 
-    # as long as there is anything waiting or active in the download queue, keep the download running
+    # as long as there is data in the download queue continue the download
     with tqdm(total=total_downloads, desc="Finished downloads") as pbar:
         while True:
             try:
                 if download_queue["waiting"] or download_queue["active"]:
                     # as long as there are not 5 active requests in the download queue
                     # move on request from the waiting queue to the active queue
-                    if len(download_queue["active"]) < 4 and download_queue["waiting"]:
+                    if len(download_queue["active"]) < 5 and download_queue["waiting"]:
                         # retrieve one request from the waiting queue
                         request_id, current_request_object = download_queue[
                             "waiting"
@@ -607,7 +510,9 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                     else:
                         # check if any of the active downloads has been finished
                         download_queue["active"] = download_json(
-                            download_queue["active"], hdf_name_results
+                            download_queue["active"],
+                            fasta_dict_order,
+                            project_directory,
                         )
                         # update the progress bar
                         pbar.update(1)
@@ -617,19 +522,19 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                 # if all downloads are finished raise download finished flag
                 else:
                     raise DownloadFinished
+                    # TODO CREATE / UPDATE THE DUCK DB HERE
             except DownloadFinished:
                 # check if all downloads are finished: if yes: delete download queue, break the loop
-                fasta_dict = already_downloaded(fasta_dict, hdf_name_results)
+                fasta_dict = already_downloaded(fasta_dict, database_path)
                 # if there is any unfinished download, requeue
                 if fasta_dict:
                     tqdm.write(
                         "{}: Requeuing incomplete downloads.".format(
-                            datetime.datetime.now().strftime("%H:%M:%S"),
-                            request_id,
+                            datetime.datetime.now().strftime("%H:%M:%S")
                         )
                     )
                     download_queue = build_download_queue(
-                        fasta_dict, download_queue_name, database, operating_mode
+                        fasta_dict, database, operating_mode
                     )
                     # recalculate the total downloads
                     total_downloads = len(download_queue["active"]) + len(

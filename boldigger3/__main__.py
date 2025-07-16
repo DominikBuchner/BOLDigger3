@@ -1,4 +1,4 @@
-import argparse, sys, datetime, luddite
+import argparse, sys, datetime, luddite, duckdb
 from boldigger3 import id_engine
 from boldigger3 import metadata_download
 from importlib.metadata import version
@@ -111,11 +111,11 @@ def main() -> None:
         metadata_download.main()
 
         # run the id engine
-        # id_engine.main(
-        #     arguments.fasta_file,
-        #     database=arguments.db,
-        #     operating_mode=arguments.mode,
-        # )
+        id_engine.main(
+            arguments.fasta_file,
+            database=arguments.db,
+            operating_mode=arguments.mode,
+        )
 
         # add additional data via the metadata
 
