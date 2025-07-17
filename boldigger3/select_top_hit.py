@@ -130,7 +130,7 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
     Returns:
         tuple: (new_threshold, thresholds)
     """
-    levels = ["Species", "Genus", "Family", "Order", "Class"]
+    levels = ["species", "genus", "family", "order", "class"]
 
     return (
         thresholds[thresholds.index(threshold) + 1],
@@ -214,9 +214,37 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
             .reset_index(name="count")
         )
 
-        print(level)
-        print("\n")
-        print(hits_above_similarity)
+        # drop nas at the selected level
+        hits_above_similarity = hits_above_similarity.dropna(subset=level, axis=0)
+
+        # if there's nothing left, move the threshold up and continue to search
+        if len(hits_above_similarity.index) == 0:
+            threshold, level = move_threshold_up(threshold, thresholds)
+            continue
+
+        # sort by count
+        hits_above_similarity = hits_above_similarity.sort_values(
+            by="count", ascending=False
+        )
+
+        # select the top hit and its count
+        top_hit, top_count = (
+            hits_above_similarity.head(1),
+            hits_above_similarity.head(1)["count"].item(),
+        )
+
+        # drop all columns with na values to not pollute the query string
+        top_hit = top_hit.dropna(axis=1).drop(labels="count", axis=1)
+
+        # create a query string
+        query_string = [
+            f"`{level}` == '{top_hit[level].item()}'" for level in top_hit.columns
+        ]
+        query_string = " and ".join(query_string)
+
+        # query for the top hits
+        top_hits = hits_for_id.query(query_string)
+        print(top_hits)
         break
 
 
