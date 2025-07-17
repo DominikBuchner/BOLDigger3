@@ -8,6 +8,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from boldigger3.exceptions import DownloadFinished
 from json.decoder import JSONDecodeError
+from requests.exceptions import ReadTimeout
 
 
 class BoldIdRequest:
@@ -126,6 +127,9 @@ def already_downloaded(fasta_dict: dict, database_path: str) -> dict:
         downloaded_ids = database.execute(
             "SELECT DISTINCT id FROM id_engine_results"
         ).fetchall()
+
+        # close the connection
+        database.close()
 
         # flatten the downloaded ids into a set for faster lookup
         downloaded_ids = {row[0] for row in downloaded_ids}
@@ -269,7 +273,7 @@ def build_post_request(BoldIdRequest: object) -> object:
                 # fetch the result
                 result = json.loads(response.text)
                 break
-            except JSONDecodeError:
+            except (JSONDecodeError, ReadTimeout):
                 # user output
                 tqdm.write(
                     f"{datetime.datetime.now().strftime('%H:%M:%S')}: Building the request failed. Waiting 60 seconds for repeat."
@@ -284,6 +288,40 @@ def build_post_request(BoldIdRequest: object) -> object:
         BoldIdRequest.timestamp = datetime.datetime.now()
 
         return BoldIdRequest
+
+
+def add_no_match(result: object, BoldIdRequest: object, fasta_order: dict) -> dict:
+    """Function to add a no match in case BOLD does not return any results
+
+    Args:
+        result (object): JSON returned from BOLD.
+        BoldIdRequest (object): Id Request object.
+        fasta_order (dict): Order of the original fasta file
+
+    Returns:
+        dict: A no match row for the dataframe
+    """
+    seq_id = result["seqid"]
+
+    row = {
+        "id": seq_id,
+        "phylum": "no-match",
+        "class": "no-match",
+        "order": "no-match",
+        "family": "no-match",
+        "genus": "no-match",
+        "species": "no-match",
+        "pct_identity": 0.0,
+        "process_id": "",
+        "bin_uri": "",
+        "request_date": pd.Timestamp.now().strftime("%Y-%m-%d %X"),
+        "database": BoldIdRequest.database,
+        "operating_mode": BoldIdRequest.operating_mode,
+        "status": "",
+        "fasta_order": fasta_order[seq_id],
+    }
+
+    return row
 
 
 def parse_and_save_data(
@@ -301,8 +339,10 @@ def parse_and_save_data(
     for result in json_objects:
         # handle no-matches here
         if not result["results"]:
-            # TODO NoMatch function
-            pass
+            # create a no-match hit
+            row = add_no_match(result, BoldIdRequest, fasta_order)
+            rows.append(row)
+            continue
 
         # parse the json
         seq_id = result["seqid"]
@@ -391,9 +431,6 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
                 # if there's no data in the response yet, continue
                 if response.status_code == 404:
                     active_queue[key].last_checked = datetime.datetime.now()
-                    tqdm.write(
-                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: No data yet for request ID {key}."
-                    )
                     continue
                 # if timing is sufficient AND data in the response, parse the response
                 else:
@@ -405,11 +442,44 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
 
                     # give user output
                     tqdm.write(
-                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Request ID {key} has successfully be downloaded."
+                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Request ID {key} has successfully been downloaded."
                     )
 
                     # return the active queue
                     return active_queue
+
+
+def parquet_to_duckdb(project_directory, database_path):
+    # check if duck db already exists
+    db_exists = database_path.exists()
+
+    # fetch the parquet path
+    parquet_path = project_directory.joinpath("boldigger3_data", "*.parquet.snappy")
+
+    # connect to the database
+    database = duckdb.connect(database_path)
+
+    # insert is db exists already, create table if not
+    if not db_exists:
+        # Create the table
+        database.execute(
+            f"""
+            CREATE TABLE id_engine_results AS
+            SELECT * FROM read_parquet('{parquet_path}')
+        """
+        )
+    else:
+        database.execute(
+            f"""
+        INSERT INTO id_engine_results
+        SELECT * FROM read_parquet('{parquet_path}')
+        """
+        )
+
+    # remove all parquet files if finished successfully
+    for file in project_directory.joinpath("boldigger3_data").glob("*.parquet.snappy"):
+        if file.is_file():
+            file.unlink()
 
 
 def main(fasta_path: str, database: int, operating_mode: int) -> None:
@@ -430,11 +500,13 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     fasta_dict_order = {key: idx for idx, key in enumerate(fasta_dict.keys())}
 
     # define a name for the duckdb database where the downloaded data will be stored
-    database_path = project_directory.joinpath(f"{fasta_name}.duckdb")
+    database_path = project_directory.joinpath(
+        "boldigger3_data", f"{fasta_name}.duckdb"
+    )
 
     # generate a name for the download queue
     download_queue_name = project_directory.joinpath(
-        "{}_download_queue.pkl".format(fasta_name)
+        "boldigger3_data", "{}_download_queue.pkl".format(fasta_name)
     )
 
     # generate a data directory to save the data to, so the working directory won't be cluttered
@@ -489,9 +561,9 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
         while True:
             try:
                 if download_queue["waiting"] or download_queue["active"]:
-                    # as long as there are not 5 active requests in the download queue
+                    # as long as there are not 4 active requests in the download queue
                     # move on request from the waiting queue to the active queue
-                    if len(download_queue["active"]) < 5 and download_queue["waiting"]:
+                    if len(download_queue["active"]) < 4 and download_queue["waiting"]:
                         # retrieve one request from the waiting queue
                         request_id, current_request_object = download_queue[
                             "waiting"
@@ -521,8 +593,8 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                         pickle.dump(download_queue, out_stream)
                 # if all downloads are finished raise download finished flag
                 else:
+                    parquet_to_duckdb(project_directory, database_path)
                     raise DownloadFinished
-                    # TODO CREATE / UPDATE THE DUCK DB HERE
             except DownloadFinished:
                 # check if all downloads are finished: if yes: delete download queue, break the loop
                 fasta_dict = already_downloaded(fasta_dict, database_path)
