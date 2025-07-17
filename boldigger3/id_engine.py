@@ -267,7 +267,10 @@ def build_post_request(BoldIdRequest: object) -> object:
             try:
                 # submit the post request
                 response = session.post(
-                    BoldIdRequest.base_url, params=BoldIdRequest.params, files=files
+                    BoldIdRequest.base_url,
+                    params=BoldIdRequest.params,
+                    files=files,
+                    timeout=10000,
                 )
 
                 # fetch the result
