@@ -334,6 +334,15 @@ def parse_and_save_data(
     request_id: int,
     database_path: str,
 ):
+    """Function to parse the JSON returned by BOLD and save it as parquet.
+
+    Args:
+        BoldIdRequest (object): BoldIdRequest object.
+        response (object): http response to parse.
+        fasta_order (dict): Order of the original fasta file, can be used to order the table after metadata addition.
+        request_id (int): Request id, used to save the file.
+        database_path (str): Path to the database to write to.
+    """
     # parse out all objects from the response
     json_objects = ijson.items(response.text, "", multiple_values=True)
     # store the resulting tables rows here when parsing the jsons
@@ -426,7 +435,7 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
                 now = datetime.datetime.now()
                 # if the url has not been checked in the last 10 seconds, check again, else skip the url
                 if now - active_queue[key].last_checked > datetime.timedelta(
-                    seconds=10
+                    seconds=15
                 ):
                     response = session.get(active_queue[key].result_url)
                 else:
@@ -453,6 +462,12 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
 
 
 def parquet_to_duckdb(project_directory, database_path):
+    """Function to stream the parquet output to duckdb.
+
+    Args:
+        project_directory (str): Project directory to work in.
+        database_path (str): Path to the database.
+    """
     # check if duck db already exists
     db_exists = database_path.exists()
 
