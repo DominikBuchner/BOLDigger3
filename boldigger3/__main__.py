@@ -97,6 +97,9 @@ def main() -> None:
         except (IndexError, TypeError):
             thresholds.append(default_thresholds[i])
 
+    # add an virtual treshold of 50 to the thresholds list, so hits with only phylum information can be handled
+    thresholds.append(50)
+
     if arguments.thresholds:
         # give user output
         print(

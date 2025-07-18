@@ -1,4 +1,4 @@
-import duckdb, datetime, more_itertools, re
+import duckdb, datetime, more_itertools, re, time
 import pandas as pd
 import dask.dataframe as dd
 import numpy as np
@@ -83,6 +83,7 @@ def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta
             chunk_data.to_excel(
                 output_path.joinpath(f"{fasta_name}_bold_results_part_{part}.xlsx"),
                 index=False,
+                engine="xlsxwriter",
             )
 
 
@@ -114,9 +115,8 @@ def get_threshold(hit_for_id: object, thresholds: list) -> object:
             return thresholds[3], "order"
         elif threshold >= thresholds[4]:
             return thresholds[4], "class"
-        # used for default thresholds --> if no hit matches the defined threshold levels, it's also a no-match
         else:
-            return 0, "no-match"
+            return thresholds[5], "phylum"
 
 
 def move_threshold_up(threshold: int, thresholds: list) -> tuple:
@@ -130,7 +130,7 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
     Returns:
         tuple: (new_threshold, thresholds)
     """
-    levels = ["species", "genus", "family", "order", "class"]
+    levels = ["species", "genus", "family", "order", "class", "phylum"]
 
     return (
         thresholds[thresholds.index(threshold) + 1],
@@ -208,7 +208,7 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
             "records": 0,
             "selected_level": pd.NA,
             "BIN": pd.NA,
-            "flags": pd.NA,
+            "flags": "||||",
         }
         for key, value in data_to_type.items():
             return_value[key] = value
@@ -303,10 +303,13 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
         final_top_hit["BIN"] = "|".join(top_hit_bins)
 
         # remove information that is higher then the selected level if neccesarry
-        if not threshold == thresholds[0]:
-            levels = all_levels[1:]
-            top_hit = top_hit.assign(
-                **{k: pd.NA for k in levels[levels.index(level) + 1 :]}
+        if threshold != thresholds[0]:
+            # get the index of the selected level
+            idx = all_levels.index(level)
+            levels_to_remove = all_levels[idx + 1 :]
+            final_top_hit[levels_to_remove] = pd.NA
+            final_top_hit[levels_to_remove] = final_top_hit[levels_to_remove].astype(
+                "string"
             )
             break
         break
@@ -348,7 +351,6 @@ def gather_top_hits(
     with duckdb.connect(id_engine_db_path) as connection:
         # extract the data per query from duckdb
         for query in tqdm(fasta_dict.keys(), desc="Top hit calculation"):
-
             sql_query = f"SELECT * FROM final_results WHERE id='{query}' ORDER BY fasta_order ASC, pct_identity DESC"
             query = clean_dataframe(connection.execute(sql_query).df())
             # find the top hit
@@ -400,7 +402,7 @@ def save_results(project_directory, fasta_name):
     )
 
     # save the data
-    all_top_hits.to_excel(excel_output, index=False)
+    all_top_hits.to_excel(excel_output, index=False, engine="xlsxwriter")
     all_top_hits.to_parquet(parquet_output)
 
     # unlink the buffer files
