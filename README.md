@@ -13,7 +13,7 @@ DNA metabarcoding datasets often comprise hundreds of Operational Taxonomic Unit
 BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these limitations. As a pure Python program, BOLDigger3 offers:
 
 - Automated access to BOLD's identification engine
-- Downloading of additional metadata for each hit
+- Downloading of BOLD's latest data package release to access all metadata
 - Selection of the best-fitting hit from the returned results
 
 ## Overview
@@ -26,7 +26,7 @@ BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these li
 - **Enhanced Database Accessibility**: Users have access to all databases offered by **BOLDSystems v5** and can select from three different operating modes.
 - **Improved Speeds**: Depending on the operating mode, BOLDigger3 can identify up to **10,000 sequences per hour**, significantly faster than BOLDigger2.
 - **No Password Required**: Users no longer need credentials to perform identifications—just select the FASTA file, database, and operating mode to start.
-- **Streamlined Data Storage**: Data is stored in an **HDF Store** for faster processing, with final outputs available in `.xlsx` and `.parquet` formats.
+- **Streamlined Data Storage**: Data is stored in an **DuckDB database** for faster processing, with final outputs available in `.xlsx` and `.parquet` formats.
 - **Process Safety**: BOLDigger3 can resume interrupted executions, continuing exactly where it left off.
 - **Dynamic Queuing**: The tool automatically manages request queuing based on the selected operating mode.
 
@@ -35,31 +35,16 @@ BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these li
 - **Identify Sequences Automatically**: Run DNA sequence identifications with a single command.
 - **Flexible Database Options**: Access to all BOLDSystems v5 databases with user-selected operating modes.
 - **High-Performance Processing**: Up to 10,000 identifications per hour, depending on settings.
-- **Robust Storage**: Data stored in HDF format for efficient processing; results in `.xlsx` and `.parquet`.
+- **Robust Storage**: Data stored in DuckDB format for efficient processing; results in `.xlsx` and `.parquet`.
 - **User-Friendly**: No credentials needed for use.
 
 ## Installation and Usage
 
-BOLDigger3 requires Python version 3.10 or higher and can be easily installed using pip in any command line:
+BOLDigger3 requires Python version 3.11 or higher and can be easily installed using pip in any command line:
 
 `pip install boldigger3`
 
 This command will install BOLDigger3 along with all its dependencies.
-BOLDigger3 uses the Python package ```playwright```, which needs a separate installation prior to first execution:
-
-`playwright install`
-
-**FOR BOLDigger2 USERS:**
-BOLDigger2 used requests-html which relied on an old version of pyppeteer. This may lead to conflicts with playwright.
-Additionally, don't forget to uninstall boldigger/boldigger2
-To solve:
-
-```
-pip uninstall pyppeteer
-pip uninstall boldigger
-pip uninstall boldigger2
-pip install --upgrade pyee
-```
 
 To run the ```identify``` function, use the following command:
 
@@ -80,8 +65,7 @@ The ```--db``` is a number between 1 and 8 corresponding to the eight databases 
 
 # Operating modes
 
-The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers. Another mode 4 has been added
-with version 1.2.6, rapid mode for short sequences:
+The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers:
 
 1: **Rapid Species Search**   
 2: **Genus and Species Search**   
@@ -111,19 +95,23 @@ Buchner D, Leese F (2020) BOLDigger – a Python package to identify and organis
 
 The BOLDigger3 algorithm operates as follows:
 
-1. **Split the FASTA**: The input FASTA file is divided into chunks that fit the limits of the selected operating mode of the identification engine.
+1. **Check for database updates**: BOLDigger3 will check if there is an updated data package release and download it if needed.
 
-2. **Queue the Chunks**: These chunks are then queued in the identification engine for processing.
+2. **Compile DuckDB database**: BOLDigger3 will parse the TSV from BOLD and save it in a DuckDB database for fast lookups.
 
-3. **Check for Results**: The algorithm periodically checks if any results can be downloaded.
+3. **Split the FASTA**: The input FASTA file is divided into chunks that fit the limits of the selected operating mode of the identification engine.
 
-4. **Data Download**: Once results are available, the data is downloaded.
+4. **Queue the Chunks**: These chunks are then queued in the identification engine for processing.
 
-5. **Data Validation**: The algorithm ensures that all data has been correctly downloaded.
+5. **Check for Results**: The algorithm periodically checks if any results can be downloaded.
 
-6. **Retrieve Additional Data**: Additional data is obtained via the API.
+6. **Data Download**: Once results are available, the data is downloaded.
 
-7. **Select Top Hit**: Finally, the algorithm selects the top hit backed by the most database entries for the final output.
+7. **Data Validation**: The algorithm ensures that all data has been correctly downloaded.
+
+8. **Retrieve Additional Data**: Additional data is added via the DuckDB database.
+
+9. **Select Top Hit**: Finally, the algorithm selects the top hit backed by the most database entries for the final output.
 
 ### Top hit selection
 
@@ -152,7 +140,7 @@ BOLDigger3 employs a flagging system to highlight certain conditions, indicating
 
 1. **Reverse BIN Taxonomy**: This flag is raised if all of the top 100 hits representing the selected match utilize reverse BIN taxonomy. Reverse BIN taxonomy assigns species names to deposited sequences on BOLD that lack species information, potentially introducing uncertainty.
 
-2. **Differing Taxonomic Information**: If there are two or more entries with differing taxonomic information above the selected threshold (e.g., two species above 97%), this flag is triggered, suggesting potential discrepancies.
+2. **Differing Taxonomic Information**: If the percentage of hits represented by the selected top hit is smaller than 90%, flag 2 will be raised indicating a potential taxonomic conflict. If your top hit is represented by 99 hits and there is 1 hit with differing taxonomy, this flag will not be raised.
 
 3. **Private Data**: If all of the top 100 hits representing the top hit are private hits, this flag is raised, indicating limited accessibility to data.
 
