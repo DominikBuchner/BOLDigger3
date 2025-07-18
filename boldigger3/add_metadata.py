@@ -1,5 +1,6 @@
 import duckdb, importlib, datetime
 from pathlib import Path
+from boldigger3.id_engine import parse_fasta
 
 
 def merge_in_additional_data(id_engine_db: str, metadata_db: str) -> None:
@@ -52,10 +53,10 @@ def main(
     boldigger3_path = Path(spec).parent
     metadata_db_path = next(boldigger3_path.joinpath("database").glob("*.duckdb"))
 
-    # find the id engine database that was downloaded
-    project_directory = Path(fasta_path).parent
-    id_engine_db_path = next(
-        project_directory.joinpath("boldigger3_data").glob("*.duckdb")
+    # find the id engine database that was downloadedy
+    fasta_dict, fasta_name, project_directory = parse_fasta(fasta_path)
+    id_engine_db_path = project_directory.joinpath(
+        "boldigger3_data", f"{fasta_name}.duckdb"
     )
 
     print(

@@ -1,4 +1,4 @@
-import duckdb, datetime, more_itertools, re, sys
+import duckdb, datetime, more_itertools, re
 import pandas as pd
 import dask.dataframe as dd
 import numpy as np
