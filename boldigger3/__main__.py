@@ -1,5 +1,8 @@
-import argparse, sys, datetime, time, luddite
-from boldigger3 import id_engine, additional_data_download, select_top_hit
+import argparse, sys, datetime, luddite, duckdb
+from boldigger3 import id_engine
+from boldigger3 import metadata_download
+from boldigger3 import add_metadata
+from boldigger3 import select_top_hit
 from importlib.metadata import version
 
 
@@ -94,6 +97,9 @@ def main() -> None:
         except (IndexError, TypeError):
             thresholds.append(default_thresholds[i])
 
+    # add an virtual treshold of 50 to the thresholds list, so hits with only phylum information can be handled
+    thresholds.append(50)
+
     if arguments.thresholds:
         # give user output
         print(
@@ -106,16 +112,21 @@ def main() -> None:
 
     # run the identification engine
     if arguments.function == "identify":
+        # download the current metadata from BOLD
+        metadata_download.main()
+
         # run the id engine
         id_engine.main(
             arguments.fasta_file,
             database=arguments.db,
             operating_mode=arguments.mode,
         )
-        # download the additional data
-        additional_data_download.main(arguments.fasta_file)
+
+        # add additional data via the metadata
+        add_metadata.main(fasta_path=arguments.fasta_file)
+
         # select the top hit
-        select_top_hit.main(arguments.fasta_file, thresholds=thresholds)
+        select_top_hit.main(fasta_path=arguments.fasta_file, thresholds=thresholds)
 
 
 # run only if called as a top level script
