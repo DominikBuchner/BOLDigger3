@@ -138,6 +138,39 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
     )
 
 
+def flag_hits(top_hits: object, final_top_hit: object):
+    # initialize the flags
+    flags = [""] * 5
+
+    # flag 1: Reverse BIN taxonomy
+    id_method = top_hits["identification_method"].dropna()
+
+    if (
+        not id_method.empty
+        and id_method.str.contains("BOLD|ID|Tree|BIN", regex=False).all()
+    ):
+        flags[0] = "1"
+
+    # flag 2: top hit ratio < 90%
+    if final_top_hit["records_ratio"].item() < 0.9:
+        flags[1] = "2"
+
+    # flag 3: all of the selected top hits are private
+    if top_hits["status"].isin(["private"]).all():
+        flags[2] = "3"
+
+    if len(top_hits.index) == 1:
+        flags[3] = "4"
+
+    # flag 5: top hit is represented by multiple bins
+    if len(final_top_hit["BIN"].str.split("|").item()) > 1:
+        flags[4] = "5"
+
+    flags = "|".join(flags)
+
+    return flags
+
+
 def find_top_hit(hits_for_id: object, thresholds: list) -> object:
     """Funtion to find the top hit for a given ID.
 
@@ -154,7 +187,7 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
     # if a nomatch is found, a no-match can directly be retured
     if level == "no-match":
         return_value = hits_for_id.query("species == 'no-match'").head(1)
-
+        fasta_order = return_value["fasta_order"]
         # columns to return
         return_value = return_value[
             [
@@ -179,6 +212,9 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
         }
         for key, value in data_to_type.items():
             return_value[key] = value
+
+        # add the fasta order back in
+        return_value["fasta_order"] = fasta_order
 
         return_value = return_value.astype(
             {
@@ -228,9 +264,11 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
         )
 
         # select the top hit and its count
-        top_hit, top_count = (
+        top_hit, top_count, top_ratio = (
             hits_above_similarity.head(1),
             hits_above_similarity.head(1)["count"].item(),
+            hits_above_similarity.head(1)["count"].item()
+            / hits_above_similarity["count"].sum(),
         )
 
         # drop all columns with na values to not pollute the query string
@@ -244,8 +282,60 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
 
         # query for the top hits
         top_hits = hits_for_id.query(query_string)
-        print(top_hits)
+
+        # collect the bins from the selected top hit
+        if threshold == thresholds[0]:
+            top_hit_bins = top_hits["bin_uri"].dropna().unique()
+        else:
+            top_hit_bins = []
+
+        # select the first match from the top hits table as the top hit
+        final_top_hit = top_hits.head(1).copy()
+
+        # add the record count to the top hit
+        final_top_hit["records"] = top_count
+        final_top_hit["records_ratio"] = top_ratio
+
+        # add the selected level
+        final_top_hit["selected_level"] = level
+
+        # add the BINs to the top hit
+        final_top_hit["BIN"] = "|".join(top_hit_bins)
+
+        # remove information that is higher then the selected level if neccesarry
+        if not threshold == thresholds[0]:
+            levels = all_levels[1:]
+            top_hit = top_hit.assign(
+                **{k: pd.NA for k in levels[levels.index(level) + 1 :]}
+            )
+            break
         break
+
+    # add flags to the hits
+    final_top_hit["flags"] = flag_hits(top_hits, final_top_hit)
+
+    # only select the data relevant for output
+    final_top_hit = final_top_hit[
+        [
+            "id",
+            "phylum",
+            "class",
+            "order",
+            "family",
+            "genus",
+            "species",
+            "pct_identity",
+            "status",
+            "records",
+            "records_ratio",
+            "selected_level",
+            "BIN",
+            "flags",
+            "fasta_order",
+        ]
+    ]
+
+    return final_top_hit
 
 
 def gather_top_hits(
@@ -253,14 +343,72 @@ def gather_top_hits(
 ):
     # store top hits here until n are reached, flush to parquet inbetween
     top_hits_buffer = []
+    buffer_counter = 0
 
     with duckdb.connect(id_engine_db_path) as connection:
         # extract the data per query from duckdb
-        for query in fasta_dict.keys():
+        for query in tqdm(fasta_dict.keys(), desc="Top hit calculation"):
+
             sql_query = f"SELECT * FROM final_results WHERE id='{query}' ORDER BY fasta_order ASC, pct_identity DESC"
             query = clean_dataframe(connection.execute(sql_query).df())
             # find the top hit
-            find_top_hit(query, thresholds)
+            top_hits_buffer.append(find_top_hit(query, thresholds))
+            # spill to parquet whenever there are 1k hits in the buffer, ingest parquet later for saving
+            if len(top_hits_buffer) >= 1_000:
+                parquet_output = project_directory.joinpath(
+                    "boldigger3_data",
+                    f"{fasta_name}_top_hit_buffer_{buffer_counter}.parquet.snappy",
+                )
+                top_hits_buffer = pd.concat(top_hits_buffer, axis=0).reset_index(
+                    drop=True
+                )
+                top_hits_buffer.to_parquet(parquet_output)
+                buffer_counter += 1
+                top_hits_buffer = []
+
+        # final buffer flush
+        if top_hits_buffer:
+            parquet_output = project_directory.joinpath(
+                "boldigger3_data",
+                f"{fasta_name}_top_hit_buffer_{buffer_counter}.parquet.snappy",
+            )
+
+            top_hits_buffer = pd.concat(top_hits_buffer, axis=0).reset_index(drop=True)
+            top_hits_buffer.to_parquet(parquet_output)
+
+
+def save_results(project_directory, fasta_name):
+    # load all data into dask dataframe
+    data_paths = project_directory.joinpath("boldigger3_data").glob(
+        f"{fasta_name}_top_hit_buffer_*.parquet.snappy"
+    )
+    all_top_hits = dd.read_parquet([str(f) for f in data_paths])
+
+    # order values globally by fasta order, drop afterwards
+    all_top_hits = (
+        all_top_hits.set_index("fasta_order", sorted=True)
+        .reset_index(drop=True)
+        .compute()
+    )
+
+    # write the output
+    parquet_output = project_directory.joinpath(
+        "boldigger3_data", "{}_identification_result.parquet.snappy".format(fasta_name)
+    )
+    excel_output = project_directory.joinpath(
+        "boldigger3_data", "{}_identification_result.xlsx".format(fasta_name)
+    )
+
+    # save the data
+    all_top_hits.to_excel(excel_output, index=False)
+    all_top_hits.to_parquet(parquet_output)
+
+    # unlink the buffer files
+    for file in project_directory.joinpath("boldigger3_data").glob(
+        f"{fasta_name}_top_hit_buffer_*.parquet.snappy"
+    ):
+        if file.exists():
+            file.unlink()
 
 
 def main(fasta_path: str, thresholds: list):
@@ -281,10 +429,17 @@ def main(fasta_path: str, thresholds: list):
     )
 
     # # stream the data from duckdb to excel first
-    # stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name)
+    stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name)
 
     tqdm.write(f"{datetime.datetime.now().strftime('%H:%M:%S')}: Calculating top hits.")
 
     gather_top_hits(
         fasta_dict, id_engine_db_path, project_directory, fasta_name, thresholds
     )
+    tqdm.write(
+        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Saving results. This may take a while."
+    )
+
+    save_results(project_directory, fasta_name)
+
+    tqdm.write(f"{datetime.datetime.now().strftime('%H:%M:%S')}: Finished.")
