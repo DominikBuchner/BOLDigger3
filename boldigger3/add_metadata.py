@@ -37,6 +37,18 @@ def merge_in_additional_data(id_engine_db: str, metadata_db: str) -> None:
     # perform the action
     id_engine_con.execute(sql_command)
 
+    # update the status - needed for DB 2
+    update_status = """
+    UPDATE final_results
+    SET status = CASE
+        WHEN processid IS NULL THEN 'private'
+        ELSE 'public'
+    END;
+    """
+
+    # Example execution using DuckDB connection 'con':
+    id_engine_con.execute(update_status)
+
     id_engine_con.close()
 
 

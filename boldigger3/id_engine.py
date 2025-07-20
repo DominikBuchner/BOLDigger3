@@ -312,8 +312,10 @@ def add_no_match(result: object, BoldIdRequest: object, fasta_order: dict) -> di
         "class": "no-match",
         "order": "no-match",
         "family": "no-match",
+        "subfamily": "no-match",
         "genus": "no-match",
         "species": "no-match",
+        "taxid_count": 0.0,
         "pct_identity": 0.0,
         "process_id": "",
         "bin_uri": "",
@@ -325,6 +327,10 @@ def add_no_match(result: object, BoldIdRequest: object, fasta_order: dict) -> di
     }
 
     return row
+
+
+def safe_status(record_key, index, default=""):
+    return record_key[index] if len(record_key) > index else default
 
 
 def parse_and_save_data(
@@ -366,7 +372,7 @@ def parse_and_save_data(
                 "id": seq_id,
                 "process_id": record_key[0],
                 "bin_uri": record_key[2],
-                "status": record_key[4],
+                "status": safe_status(record_key, 4),
                 "pct_identity": record_data.get("pident"),
             }
 
