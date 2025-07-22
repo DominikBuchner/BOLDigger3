@@ -1,4 +1,4 @@
-import datetime, duckdb, sys, pickle, more_itertools, requests_html, json, time, os, 
+import datetime, duckdb, sys, pickle, more_itertools, requests_html, json, time, os
 import pandas as pd
 from Bio import SeqIO
 from pathlib import Path
