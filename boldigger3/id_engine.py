@@ -446,7 +446,6 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
                     seconds=15
                 ):
                     response = session.get(active_queue[key].result_url)
-                    print(active_queue[key].result_url)
                 else:
                     continue
                 # if there's no data in the response yet, continue
