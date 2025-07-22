@@ -19,7 +19,6 @@ setuptools.setup(
         "biopython>=1.85",
         "dask>=2025.3.0",
         "duckdb>=1.3.2",
-        "ijson>=3.4.0",
         "luddite>=1.0.4",
         "more_itertools>=10.5.0",
         "numpy>=2.0.0",

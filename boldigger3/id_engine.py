@@ -1,4 +1,4 @@
-import datetime, duckdb, sys, pickle, more_itertools, requests_html, json, time, os, ijson
+import datetime, duckdb, sys, pickle, more_itertools, requests_html, json, time, os, 
 import pandas as pd
 from Bio import SeqIO
 from pathlib import Path
@@ -159,9 +159,9 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
 
     # the database int is translated here
     idx_to_database = {
-        1: "public.bin-tax-derep",
+        1: "public.tax-derep",
         2: "species",
-        3: "all.bin-tax-derep",
+        3: "all.tax-derep",
         4: "DS-CANREF22",
         5: "public.plants",
         6: "public.fungi",
@@ -350,7 +350,8 @@ def parse_and_save_data(
         database_path (str): Path to the database to write to.
     """
     # parse out all objects from the response
-    json_objects = ijson.items(response.text, "", multiple_values=True)
+    json_objects = [json.loads(line) for line in response.iter_lines()]
+
     # store the resulting tables rows here when parsing the jsons
     rows = []
 
@@ -418,6 +419,7 @@ def parse_and_save_data(
     output_file = database_path.joinpath(
         "boldigger3_data", f"request_id_{request_id}.parquet.snappy"
     )
+
     id_engine_result.to_parquet(output_file)
 
 
@@ -444,6 +446,7 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
                     seconds=15
                 ):
                     response = session.get(active_queue[key].result_url)
+                    print(active_queue[key].result_url)
                 else:
                     continue
                 # if there's no data in the response yet, continue
