@@ -22,6 +22,7 @@ def clean_dataframe(dataframe: object) -> object:
         "marker_code",
     ]
 
+    # clean na values
     dataframe[metadata_columns] = dataframe[metadata_columns].replace(
         [None, "None", ""], pd.NA
     )
@@ -32,10 +33,17 @@ def clean_dataframe(dataframe: object) -> object:
     # Levels to clean
     levels = ["phylum", "class", "order", "family", "genus", "species"]
 
+    # clean Na and None values from levels
+    dataframe[levels] = dataframe[levels].replace([None, "None", ""], pd.NA)
+
     # replace any occurrence of invalid characters with pd.NA
-    dataframe[levels] = dataframe[levels].apply(
-        lambda col: col.where(~col.str.contains(pattern, regex=True)).astype("string")
-    )
+    for level in levels:
+        col = dataframe[level].astype("string")
+        mask = col.str.contains(pattern, regex=True, na=pd.NA)
+        dataframe[level] = col.where(~mask)
+    # dataframe[levels] = dataframe[levels].apply(
+    #     lambda col: col.where(~col.str.contains(pattern, regex=True)).astype("string")
+    # )
 
     # replace all empty strings in dataframe with pd.NA
     dataframe = dataframe.replace("", pd.NA)
@@ -63,7 +71,7 @@ def clean_dataframe(dataframe: object) -> object:
 
 def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name):
     # chunk the fasta dicts keys to retrieve from duckdb
-    chunks = enumerate(more_itertools.chunked(fasta_dict.keys(), n=10_000), start=1)
+    chunks = enumerate(more_itertools.chunked(fasta_dict.keys(), n=9_500), start=1)
 
     # define the output path
     output_path = project_directory.joinpath("boldigger3_data")
