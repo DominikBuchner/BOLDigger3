@@ -339,6 +339,7 @@ def parse_and_save_data(
     fasta_order: dict,
     request_id: int,
     database_path: str,
+    fasta_name: str,
 ):
     """Function to parse the JSON returned by BOLD and save it as parquet.
 
@@ -374,8 +375,8 @@ def parse_and_save_data(
                 "process_id": record_key[0],
                 "bin_uri": record_key[2],
                 "status": safe_status(record_key, 4),
-                "pct_identity": record_data.get("pident"),
-            }
+                "pct_identity": 100.0 - record_data.get("pdist"),
+            }  # definition changed, now 100 - pdist
 
             taxonomy = record_data.get("taxonomy", {})
             row.update(taxonomy)
@@ -417,13 +418,15 @@ def parse_and_save_data(
 
     # finally stream to parquet to later load into duckdb, update the active queue
     output_file = database_path.joinpath(
-        "boldigger3_data", f"request_id_{request_id}.parquet.snappy"
+        "boldigger3_data", f"request_id_{request_id}_{fasta_name}.parquet.snappy"
     )
 
     id_engine_result.to_parquet(output_file)
 
 
-def download_json(active_queue: dict, fasta_order: dict, project_directory: str):
+def download_json(
+    active_queue: dict, fasta_order: dict, project_directory: str, fasta_name: str
+):
     """Function to download the JSON results from the id engine and store them in temporary parquet files.
 
     Args:
@@ -456,7 +459,12 @@ def download_json(active_queue: dict, fasta_order: dict, project_directory: str)
                 else:
                     # parse the response here and save, update the active queue
                     parse_and_save_data(
-                        active_queue[key], response, fasta_order, key, project_directory
+                        active_queue[key],
+                        response,
+                        fasta_order,
+                        key,
+                        project_directory,
+                        fasta_name,
                     )
                     active_queue.pop(key)
 
@@ -480,7 +488,9 @@ def parquet_to_duckdb(project_directory, database_path):
     db_exists = database_path.exists()
 
     # fetch the parquet path
-    parquet_path = project_directory.joinpath("boldigger3_data", "*.parquet.snappy")
+    parquet_path = project_directory.joinpath(
+        "boldigger3_data", "request_id_*.parquet.snappy"
+    )
 
     # connect to the database
     database = duckdb.connect(database_path)
@@ -611,6 +621,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                             download_queue["active"],
                             fasta_dict_order,
                             project_directory,
+                            fasta_name,
                         )
                         # update the progress bar
                         pbar.update(1)
