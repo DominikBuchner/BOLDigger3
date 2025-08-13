@@ -71,7 +71,7 @@ def clean_dataframe(dataframe: object) -> object:
 
 def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name):
     # chunk the fasta dicts keys to retrieve from duckdb
-    chunks = enumerate(more_itertools.chunked(fasta_dict.keys(), n=9_500), start=1)
+    chunks = enumerate(more_itertools.chunked(fasta_dict.keys(), n=8_000), start=1)
 
     # define the output path
     output_path = project_directory.joinpath("boldigger3_data")
