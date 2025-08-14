@@ -261,7 +261,7 @@ def build_post_request(BoldIdRequest: object) -> object:
         data = "".join(BoldIdRequest.query_data)
 
         # generate the files to send via the id engine
-        files = {"file": ("submitted.fas", data, "text/plain")}
+        files = {"fasta_file": ("submitted.fas", data, "text/plain")}
 
         while True:
             try:
