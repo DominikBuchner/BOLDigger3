@@ -444,6 +444,15 @@ def download_json(
         while active_queue:
             for key in active_queue.keys():
                 now = datetime.datetime.now()
+                # check the timestamp of the key, if it is older than 10 minutes, pop it from the active
+                # queue to fetch it in a later run
+                if now - active_queue[key].timestamp > datetime.timedelta(minutes=15):
+                    tqdm.write(
+                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Request ID {key} has timed out. Will be requeued."
+                    )
+                    active_queue.pop(key)
+                    return active_queue
+
                 # if the url has not been checked in the last 10 seconds, check again, else skip the url
                 if now - active_queue[key].last_checked > datetime.timedelta(
                     seconds=15
@@ -495,22 +504,26 @@ def parquet_to_duckdb(project_directory, database_path):
     # connect to the database
     database = duckdb.connect(database_path)
 
-    # insert is db exists already, create table if not
-    if not db_exists:
-        # Create the table
-        database.execute(
-            f"""
-            CREATE TABLE id_engine_results AS
+    try:
+        # insert is db exists already, create table if not
+        if not db_exists:
+            # Create the table
+            database.execute(
+                f"""
+                CREATE TABLE id_engine_results AS
+                SELECT * FROM read_parquet('{parquet_path}')
+            """
+            )
+        else:
+            database.execute(
+                f"""
+            INSERT INTO id_engine_results
             SELECT * FROM read_parquet('{parquet_path}')
-        """
-        )
-    else:
-        database.execute(
-            f"""
-        INSERT INTO id_engine_results
-        SELECT * FROM read_parquet('{parquet_path}')
-        """
-        )
+            """
+            )
+    except duckdb.IOException:
+        # if no parquet files are there dues to killed downloads, just continue
+        pass
 
     # remove all parquet files if finished successfully
     for file in project_directory.joinpath("boldigger3_data").glob("*.parquet.snappy"):
@@ -651,7 +664,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                     )
                     # reset the progress bar for the second round of downloads
                     pbar.reset()
-                    pbar.total(total_downloads)
+                    pbar.total = total_downloads
                     pbar.refresh()
                 else:
                     tqdm.write(
