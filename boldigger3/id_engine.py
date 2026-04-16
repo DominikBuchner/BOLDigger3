@@ -150,7 +150,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
     """Function that generates a base URL and the params for the POST request to the ID engine.
 
     Args:
-        database (int): Between 1 and 7 referring to the database, see readme for details.
+        database (int): Between 1 and 8 referring to the database, see readme for details.
         operating_mode (int): Between 1 and 3 referring to the operating mode, see readme for details
 
     Returns:
@@ -211,7 +211,7 @@ def build_download_queue(fasta_dict: dict, database: int, operating_mode: int) -
     base_url, params = build_url_params(database, operating_mode)
 
     # determine the query size from the params
-    query_size_dict = {0.94: 1000, 0.9: 200, 0.75: 100}
+    query_size_dict = {0.94: 100, 0.9: 20, 0.75: 10}
     query_size = query_size_dict[params["mi"]]
 
     # split the fasta dict in query sized chunks
@@ -262,6 +262,7 @@ def build_post_request(BoldIdRequest: object) -> object:
 
         # generate the files to send via the id engine
         files = {"fasta_file": ("submitted.fas", data, "text/plain")}
+        backoff_time = 0
 
         while True:
             try:
@@ -275,14 +276,23 @@ def build_post_request(BoldIdRequest: object) -> object:
 
                 # fetch the result
                 result = json.loads(response.text)
+                if "detail" in result.keys():
+                    tqdm.write(
+                        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Limit reached. Waiting."
+                    )
+                    # wait for the backoff time
+                    backoff_time += 30
+                    time.sleep(backoff_time)
+                    continue
                 break
-            except (JSONDecodeError, ReadTimeout):
+            except (JSONDecodeError, ReadTimeout, KeyError):
                 # user output
                 tqdm.write(
-                    f"{datetime.datetime.now().strftime('%H:%M:%S')}: Building the request failed. Waiting 60 seconds for repeat."
+                    f"{datetime.datetime.now().strftime('%H:%M:%S')}: Building the request failed. Waiting."
                 )
-                # wait 60 seconds
-                time.sleep(60)
+                backoff_time += 30
+                # wait for the backoff_time
+                time.sleep(backoff_time)
 
         result_url = f"https://id.boldsystems.org/submission/results/{result['sub_id']}"
 
@@ -446,7 +456,7 @@ def download_json(
                 now = datetime.datetime.now()
                 # check the timestamp of the key, if it is older than 10 minutes, pop it from the active
                 # queue to fetch it in a later run
-                if now - active_queue[key].timestamp > datetime.timedelta(minutes=15):
+                if now - active_queue[key].timestamp > datetime.timedelta(minutes=30):
                     tqdm.write(
                         f"{datetime.datetime.now().strftime('%H:%M:%S')}: Request ID {key} has timed out. Will be requeued."
                     )
@@ -612,21 +622,26 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                 if download_queue["waiting"] or download_queue["active"]:
                     # as long as there are not 4 active requests in the download queue
                     # move on request from the waiting queue to the active queue
-                    if len(download_queue["active"]) < 4 and download_queue["waiting"]:
+                    if len(download_queue["active"]) < 10 and download_queue["waiting"]:
                         # retrieve one request from the waiting queue
                         request_id, current_request_object = download_queue[
                             "waiting"
                         ].popitem(last=False)
+
+                        # add this request to the active queue
+                        download_queue["active"][request_id] = build_post_request(
+                            current_request_object
+                        )
+
                         tqdm.write(
                             "{}: Request ID {} has been moved to the active downloads.".format(
                                 datetime.datetime.now().strftime("%H:%M:%S"),
                                 request_id,
                             )
                         )
-                        # add this request to the active queue
-                        download_queue["active"][request_id] = build_post_request(
-                            current_request_object
-                        )
+
+                        # wait for 10 seconds until sending the next request
+                        time.sleep(30)
                     # check if any of the active queue objects has finished and can be saved and removed
                     else:
                         # check if any of the active downloads has been finished
