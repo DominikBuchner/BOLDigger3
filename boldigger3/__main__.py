@@ -3,6 +3,7 @@ from boldigger3 import id_engine
 from boldigger3 import metadata_download
 from boldigger3 import add_metadata
 from boldigger3 import select_top_hit
+from boldigger3 import download_database
 from importlib.metadata import version
 
 
@@ -63,6 +64,18 @@ def main() -> None:
         help="Thresholds to use for the selection of the top hit.",
     )
 
+    # add the database download parse
+    parser_download = subparsers.add_parser(
+        "download_db", help="Download the public database."
+    )
+
+    # add the output dir argument
+    parser_download.add_argument(
+        "output_dir",
+        help="Directory to download and save the public database.",
+        type=str,
+    )
+
     # add version control
     # get the installed version
     current_version = version("boldigger3")
@@ -91,29 +104,26 @@ def main() -> None:
     default_thresholds = [97, 95, 90, 85, 75]
     thresholds = []
 
-    for i in range(5):
-        try:
-            thresholds.append(arguments.thresholds[i])
-        except (IndexError, TypeError):
-            thresholds.append(default_thresholds[i])
-
-    # add an virtual treshold of 50 to the thresholds list, so hits with only phylum information can be handled
-    thresholds.append(50)
-
-    if arguments.thresholds:
-        # give user output
-        print(
-            "{}: Default thresholds changed!\n{}: Species: {}, Genus: {}, Family: {}, Order: {}".format(
-                datetime.datetime.now().strftime("%H:%M:%S"),
-                datetime.datetime.now().strftime("%H:%M:%S"),
-                *thresholds
-            )
-        )
-
     # run the identification engine
     if arguments.function == "identify":
-        # download the current metadata from BOLD
-        metadata_download.main()
+        for i in range(5):
+            try:
+                thresholds.append(arguments.thresholds[i])
+            except (IndexError, TypeError):
+                thresholds.append(default_thresholds[i])
+
+        # add an virtual treshold of 50 to the thresholds list, so hits with only phylum information can be handled
+        thresholds.append(50)
+
+        if arguments.thresholds:
+            # give user output
+            print(
+                "{}: Default thresholds changed!\n{}: Species: {}, Genus: {}, Family: {}, Order: {}".format(
+                    datetime.datetime.now().strftime("%H:%M:%S"),
+                    datetime.datetime.now().strftime("%H:%M:%S"),
+                    *thresholds
+                )
+            )
 
         # run the id engine
         id_engine.main(
@@ -127,6 +137,11 @@ def main() -> None:
 
         # select the top hit
         select_top_hit.main(fasta_path=arguments.fasta_file, thresholds=thresholds)
+
+    # run the database download
+    if arguments.function == "download_db":
+        # download and save the database
+        download_database.main(output_dir=arguments.output_dir)
 
 
 # run only if called as a top level script

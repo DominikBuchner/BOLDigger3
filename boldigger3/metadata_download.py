@@ -236,13 +236,11 @@ def database_to_duckdb(output_path: str, package_date: str):
         )
 
         # stream the data to duck db
-        con.execute(
-            f"""
+        con.execute(f"""
             CREATE TABLE {table_name} AS
                     SELECT {columns_def}
                     FROM read_csv_auto('{tsv_path}', delim='\t', header=True)
-            """
-        )
+            """)
 
         # close the connection
         con.close()
