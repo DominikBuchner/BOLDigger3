@@ -155,7 +155,7 @@ def flag_hits(top_hits: object, final_top_hit: object):
 
     if (
         not id_method.empty
-        and id_method.str.contains("BOLD|ID|Tree|BIN", regex=False).all()
+        and id_method.str.contains("BOLD|ID|Tree|BIN", regex=True).all()
     ):
         flags[0] = "1"
 

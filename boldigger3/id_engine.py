@@ -109,7 +109,7 @@ def parse_fasta(fasta_path: str) -> tuple:
         sys.exit()
 
 
-def already_downloaded(fasta_dict: dict, database_path: str) -> dict:
+def already_downloaded(fasta_dict: dict, database_path: Path) -> dict:
     """Function to check if any of the requests has been downloaded and stored in the duckdb database.
 
     Args:
@@ -197,7 +197,7 @@ def build_download_queue(fasta_dict: dict, database: int, operating_mode: int) -
     Args:
         fasta_dict (dict): Dict that holds the data in the fasta file.
         download_queue_name (str): String that holds the path where the download queue is saved.
-        database (int): Between 1 and 7 referring to the database, see readme for details.
+        database (int): Between 1 and 8 referring to the database, see readme for details.
         operating_mode (int): Between 1 and 3 referring to the operating mode, see readme for details
 
     Returns:
@@ -348,7 +348,7 @@ def parse_and_save_data(
     response: object,
     fasta_order: dict,
     request_id: int,
-    database_path: str,
+    database_path: Path,
     fasta_name: str,
 ):
     """Function to parse the JSON returned by BOLD and save it as parquet.
@@ -435,7 +435,7 @@ def parse_and_save_data(
 
 
 def download_json(
-    active_queue: dict, fasta_order: dict, project_directory: str, fasta_name: str
+    active_queue: dict, fasta_order: dict, project_directory: Path, fasta_name: str
 ):
     """Function to download the JSON results from the id engine and store them in temporary parquet files.
 
@@ -547,7 +547,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     Args:
         fasta_path (str): Path to the fasta file.
         database (int): The database to use. Can be database 1-8, see readme for details.
-        operating_mode (int): The operating mode to use. Can be 1-4, see readme for details.
+        operating_mode (int): The operating mode to use. Can be 1-3, see readme for details.
     """
     # user output
     tqdm.write(f"{datetime.datetime.now().strftime('%H:%M:%S')}: Reading input fasta.")
@@ -685,7 +685,6 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                     tqdm.write(
                         "{}: All downloads finished successfully.".format(
                             datetime.datetime.now().strftime("%H:%M:%S"),
-                            request_id,
                         )
                     )
                     # finally remove the download queue
