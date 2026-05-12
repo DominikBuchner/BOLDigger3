@@ -8,7 +8,7 @@
 A Python program to query .fasta files against the databases of www.boldsystems.org v5!
 
 ## Introduction
-DNA metabarcoding datasets often comprise hundreds of Operational Taxonomic Units (OTUs), requiring querying against databases for taxonomic assignment. The Barcode of Life Data system (BOLD) is a widely used database for this purpose among biologists. However, BOLD's online platform limits users to identifying batches of only 1000, 200 or 100  (depending on operating mode) sequences at a time.
+DNA metabarcoding datasets often comprise hundreds of Operational Taxonomic Units (OTUs), requiring querying against databases for taxonomic assignment. The Barcode of Life Data system (BOLD) is a widely used database for this purpose among biologists. However, BOLD's online platform limits users to identifying batches of only 1000, 200 or 100 (depending on operating mode) sequences at a time.
 
 BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these limitations. As a pure Python program, BOLDigger3 offers:
 
@@ -18,15 +18,15 @@ BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these li
 
 ## Overview
 
-**BOLDigger3** is an automated tool designed for DNA sequence identification through **BOLDSystems v5**, supporting integration into bioinformatics pipelines with enhanced functionality and performance. With BOLDigger3, users can identify up to **10,000 sequences per hour** without the need for credentials, using an optimized data storage and queuing system that improves speed and process safety.
+**BOLDigger3** is an automated tool designed for DNA sequence identification through **BOLDSystems v5**, supporting integration into bioinformatics pipelines with enhanced functionality and performance. With BOLDigger3, users can identify up to **10,000 sequences per hour** using an optimized data storage and queuing system that improves speed and process safety.
 
 ## Key Differences Between BOLDigger3 and BOLDigger2
 
 - **Unified Function**: BOLDigger3 consolidates all actions into a single function, `identify`, which automatically performs identification, additional data downloading, and top-hit selection, making it easier to integrate into pipelines.
 - **Enhanced Database Accessibility**: Users have access to all databases offered by **BOLDSystems v5** and can select from three different operating modes.
 - **Improved Speeds**: Depending on the operating mode, BOLDigger3 can identify up to **10,000 sequences per hour**, significantly faster than BOLDigger2.
-- **No Password Required**: Users no longer need credentials to perform identifications—just select the FASTA file, database, and operating mode to start.
-- **Streamlined Data Storage**: Data is stored in an **DuckDB database** for faster processing, with final outputs available in `.xlsx` and `.parquet` formats.
+- **BOLD Credentials Required for Database Download**: Users need a BOLD account to download the public database package. Sequence identifications via the ID engine do not require credentials.
+- **Streamlined Data Storage**: Data is stored in a **DuckDB database** for faster processing, with final outputs available in `.xlsx` and `.parquet` formats.
 - **Process Safety**: BOLDigger3 can resume interrupted executions, continuing exactly where it left off.
 - **Dynamic Queuing**: The tool automatically manages request queuing based on the selected operating mode.
 
@@ -36,7 +36,7 @@ BOLDigger3, the successor to BOLDigger2 and BOLDigger, aims to overcome these li
 - **Flexible Database Options**: Access to all BOLDSystems v5 databases with user-selected operating modes.
 - **High-Performance Processing**: Up to 10,000 identifications per hour, depending on settings.
 - **Robust Storage**: Data stored in DuckDB format for efficient processing; results in `.xlsx` and `.parquet`.
-- **User-Friendly**: No credentials needed for use.
+- **User-Friendly**: Credentials are only required once to download the public database.
 
 ## Installation and Usage
 
@@ -46,9 +46,21 @@ BOLDigger3 requires Python version 3.11 or higher and can be easily installed us
 
 This command will install BOLDigger3 along with all its dependencies.
 
+### Step 1: Download the public database
+
+Before running identifications, download the latest BOLD public database package. This step requires a valid BOLD account (register at www.boldsystems.org):
+
+`boldigger3 download_db PATH_TO_OUTPUT_DIR`
+
+BOLDigger3 will prompt for your BOLD username and password, check whether a local database already exists, and download and convert the latest release to a DuckDB file (`.ddb`) if needed.
+
+### Step 2: Run the identification
+
 To run the ```identify``` function, use the following command:
 
-`boldigger3 identify PATH_TO_FASTA --db DATABASE_NR --mode OPERATING MODE`
+`boldigger3 identify PATH_TO_FASTA PATH_TO_DATABASE --db DATABASE_NR --mode OPERATING_MODE`
+
+`PATH_TO_DATABASE` is the path to the `.ddb` file downloaded in Step 1.
 
 # Databases
 
@@ -65,7 +77,7 @@ The ```--db``` is a number between 1 and 8 corresponding to the eight databases 
 
 # Operating modes
 
-The ```--mode``` is a number between 1 and the corresponding to the 3 operating modes BOLD v5 currently offers:
+The ```--mode``` is a number between 1 and 3, corresponding to the three operating modes BOLD v5 currently offers:
 
 1: **Rapid Species Search**   
 2: **Genus and Species Search**   
@@ -73,7 +85,7 @@ The ```--mode``` is a number between 1 and the corresponding to the 3 operating 
 
 To customize the implemented thresholds for user-specific needs, the thresholds can be passed as an additional (ordered) argument. Up to five different thresholds can be passed for the different taxonomic levels (Species, Genus, Family, Order, Class). Thresholds not passed will be replaced by default, but BOLDigger3 will also inform you about this:
 
-`boldigger3 identify PATH_TO_FASTA --db DATABASE_NR --mode OPERATING MODE --thresholds 99 97`
+`boldigger3 identify PATH_TO_FASTA PATH_TO_DATABASE --db DATABASE_NR --mode OPERATING_MODE --thresholds 99 97`
 
 Output:
 
@@ -93,31 +105,33 @@ Buchner D, Leese F (2020) BOLDigger – a Python package to identify and organis
 
 ## The BOLDigger3 Algorithm
 
-The BOLDigger3 algorithm operates as follows:
+### Database download (`download_db`)
 
-1. **Check for database updates**: BOLDigger3 will check if there is an updated data package release and download it if needed.
+1. **Login**: BOLDigger3 prompts for BOLD credentials and establishes an authenticated session.
 
-2. **Compile DuckDB database**: BOLDigger3 will parse the TSV from BOLD and save it in a DuckDB database for fast lookups.
+2. **Check database status**: BOLDigger3 checks whether a local database file already matches the latest BOLD data package release.
 
-3. **Split the FASTA**: The input FASTA file is divided into chunks that fit the limits of the selected operating mode of the identification engine.
+3. **Download and compile**: If the local database is missing or outdated, BOLDigger3 downloads the latest Parquet release from BOLD and converts it into a DuckDB file (`.ddb`) for fast lookups.
 
-4. **Queue the Chunks**: These chunks are then queued in the identification engine for processing.
+### Identification (`identify`)
 
-5. **Check for Results**: The algorithm periodically checks if any results can be downloaded.
+1. **Split the FASTA**: The input FASTA file is divided into chunks that fit the limits of the selected operating mode of the identification engine.
 
-6. **Data Download**: Once results are available, the data is downloaded.
+2. **Queue the Chunks**: These chunks are then queued in the identification engine for processing.
 
-7. **Data Validation**: The algorithm ensures that all data has been correctly downloaded.
+3. **Check for Results**: The algorithm periodically checks if any results can be downloaded.
 
-8. **Retrieve Additional Data**: Additional data is added via the DuckDB database.
+4. **Data Download**: Once results are available, the data is downloaded.
 
-9. **Select Top Hit**: Finally, the algorithm selects the top hit backed by the most database entries for the final output.
+5. **Data Validation**: The algorithm ensures that all data has been correctly downloaded.
+
+6. **Retrieve Additional Data**: Additional metadata (collection site, coordinates, collector, etc.) is joined from the local DuckDB database.
+
+7. **Select Top Hit**: Finally, the algorithm selects the top hit backed by the most database entries for the final output.
 
 ### Top hit selection
 
-Different thresholds (97%: species level, 95%: genus level, 90%: family level, 85%: order level) for the taxonomic levels are used to find the best fitting hit. After determining the threshold for all hits the most common hit above the threshold will be selected. Note that for all hits below the threshold, the taxonomic resolution will be adjusted accordingly (e.g. for a 96% hit the species-level information will be discarded, and genus-level information will be used as the lowest taxonomic level).
-
-The BOLDigger3 algorithm functions as follows:
+Different thresholds for the taxonomic levels are used to find the best fitting hit. The default thresholds are: 97%: species, 95%: genus, 90%: family, 85%: order, 75%: class, and 50%: phylum. After determining the threshold for all hits, the most common hit above the threshold will be selected. Note that for all hits below the threshold, the taxonomic resolution will be adjusted accordingly (e.g. for a 96% hit the species-level information will be discarded, and genus-level information will be used as the lowest taxonomic level).
 
 1. **Identify Maximum Similarity**: Find the maximum similarity value among the top 100 hits currently under consideration.
    

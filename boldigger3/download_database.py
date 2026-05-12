@@ -174,7 +174,7 @@ def main(output_dir: str) -> None:
         return None
     else:
         print(
-            f"{datetime.datetime.now():%H:%M:%S}: Do you want to download the latest database release?."
+            f"{datetime.datetime.now():%H:%M:%S}: Do you want to download the latest database release?"
         )
         response = input(f"{datetime.datetime.now():%H:%M:%S}: yes/no: ")
         if response == "yes":

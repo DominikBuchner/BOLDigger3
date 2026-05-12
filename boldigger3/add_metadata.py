@@ -3,7 +3,7 @@ from pathlib import Path
 from boldigger3.id_engine import parse_fasta
 
 
-def merge_in_additional_data(id_engine_db: str, metadata_db: str) -> None:
+def merge_in_additional_data(id_engine_db: Path, metadata_db: Path) -> None:
     """Function to merge in the additional metadata into the ID engine results
 
     Args:
@@ -23,6 +23,8 @@ def merge_in_additional_data(id_engine_db: str, metadata_db: str) -> None:
         print(
             f"{datetime.datetime.now().strftime('%H:%M:%S')}: Metadata has already been added in a previous run."
         )
+        id_engine_con.close()
+        return
 
     # SQL Command definition
     sql_command = f"""
@@ -52,18 +54,15 @@ def merge_in_additional_data(id_engine_db: str, metadata_db: str) -> None:
     id_engine_con.close()
 
 
-def main(
-    fasta_path: str,
-) -> None:
+def main(fasta_path: str, db_path: str) -> None:
     """Function to add the metadata to the ID engine results.
 
     Args:
-        fasta_path (str): _description_
+        fasta_path (str): Path to the fasta file that was identified.
+        db_path (str): Path to the locally downloaded BOLD database (.ddb file).
     """
     # find the metadata database
-    spec = importlib.util.find_spec("boldigger3").origin
-    boldigger3_path = Path(spec).parent
-    metadata_db_path = next(boldigger3_path.joinpath("database").glob("*.duckdb"))
+    metadata_db_path = Path(db_path)
 
     # find the id engine database that was downloadedy
     fasta_dict, fasta_name, project_directory = parse_fasta(fasta_path)
@@ -72,7 +71,7 @@ def main(
     )
 
     print(
-        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Adding metadata to the ID engine results.".format()
+        f"{datetime.datetime.now().strftime('%H:%M:%S')}: Adding metadata to the ID engine results."
     )
     # merge in the additional data
     merge_in_additional_data(id_engine_db_path, metadata_db_path)

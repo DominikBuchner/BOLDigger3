@@ -1,6 +1,5 @@
 import argparse, sys, datetime, luddite, duckdb
 from boldigger3 import id_engine
-from boldigger3 import metadata_download
 from boldigger3 import add_metadata
 from boldigger3 import select_top_hit
 from boldigger3 import download_database
@@ -36,6 +35,10 @@ def main() -> None:
         "fasta_file",
         help="Path to the fasta file or fasta file in the current working directory to be identified.",
         type=str,
+    )
+
+    parser_identify.add_argument(
+        "db_path", help="Path to the locally downloaded database.", type=str
     )
 
     # add the database argument
@@ -133,7 +136,7 @@ def main() -> None:
         )
 
         # add additional data via the metadata
-        add_metadata.main(fasta_path=arguments.fasta_file)
+        add_metadata.main(fasta_path=arguments.fasta_file, db_path=arguments.db_path)
 
         # select the top hit
         select_top_hit.main(fasta_path=arguments.fasta_file, thresholds=thresholds)
