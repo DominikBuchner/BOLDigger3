@@ -1,6 +1,17 @@
 import datetime, sys, getpass, requests_html, duckdb
 from pathlib import Path
 from tqdm import tqdm
+import urllib.request
+import math
+
+
+class DownloadProgressBar(tqdm):
+    """tqdm subclass that integrates with urllib.request.urlretrieve's reporthook."""
+
+    def update_to(self, b=1, bsize=1, tsize=None):
+        if tsize is not None:
+            self.total = tsize
+        self.update(b * bsize - self.n)
 
 
 def login() -> requests_html.HTMLSession:
@@ -99,25 +110,26 @@ def download_and_save_database(
     """
     uid = session.get(f"https://bench.boldsystems.org{data_url}")
     uid = uid.text.replace('"', "")
-
     download_url = f"https://bench.boldsystems.org{data_url}&uid={uid}"
 
     download_filename = output_dir.joinpath(f"{package_id}.parquet")
 
     with session.get(download_url, stream=True) as r:
         r.raise_for_status()
-        total_size = int(r.headers.get("content-length", 0))
+        total = int(r.headers.get("content-length", 0))
 
-        with open(download_filename, "wb") as f, tqdm(
-            total=total_size,
+        with DownloadProgressBar(
+            total=total,
             unit="B",
             unit_scale=True,
             miniters=1,
             desc="Downloading public database",
         ) as t:
-            for chunk in r.iter_content(chunk_size=1024 * 1024):
-                f.write(chunk)
-                t.update(len(chunk))
+            with open(download_filename, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+                        t.update(len(chunk))
 
     ddb_output_path = output_dir.joinpath(f"{package_id}.ddb")
 
@@ -164,6 +176,7 @@ def main(output_dir: str) -> None:
 
     session = login()
     output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     up_to_date, data_url, package_id = check_db_status(
         session=session, output_dir=output_dir
