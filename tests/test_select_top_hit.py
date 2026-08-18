@@ -264,3 +264,24 @@ class TestFindTopHit:
         ])
         result = find_top_hit(hits, THRESHOLDS)
         assert result["fasta_order"].item() == 42
+
+    def test_below_phylum_threshold_does_not_crash(self):
+        # pct_identity is below even the virtual phylum threshold (50) -
+        # previously raised IndexError in move_threshold_up
+        hits = make_hits([{"pct_identity": 30.0}])
+        result = find_top_hit(hits, THRESHOLDS)
+        assert pd.isna(result["selected_level"].item())
+        assert pd.isna(result["phylum"].item())
+        assert result["records"].item() == 0
+
+    def test_all_na_phylum_does_not_crash(self):
+        # no hit has usable phylum information at all - previously raised
+        # IndexError in move_threshold_up once the phylum level was reached
+        hits = make_hits([
+            {"pct_identity": 60.0, "phylum": pd.NA},
+            {"pct_identity": 55.0, "phylum": pd.NA},
+        ])
+        result = find_top_hit(hits, THRESHOLDS)
+        assert pd.isna(result["selected_level"].item())
+        assert pd.isna(result["phylum"].item())
+        assert result["records"].item() == 0

@@ -137,6 +137,11 @@ def move_threshold_up(threshold: int, thresholds: list) -> tuple:
 
     Returns:
         tuple: (new_threshold, thresholds)
+
+    Note:
+        threshold must not already be thresholds[-1] (phylum) - there is no
+        level beyond it, so the index lookup below would raise IndexError.
+        Callers must check for that case themselves before calling this.
     """
     levels = ["species", "genus", "family", "order", "class", "phylum"]
 
@@ -179,6 +184,66 @@ def flag_hits(top_hits: object, final_top_hit: object):
     return flags
 
 
+def build_unresolved_result(return_value: object, blank_taxonomy: bool = False) -> object:
+    """Build a single-line result for a query that could not be classified,
+    either because it is a literal 'no-match' or because none of its hits
+    were reliable enough to resolve even the lowest (phylum) level.
+
+    Args:
+        return_value (object): Single row dataframe to base the result on.
+        blank_taxonomy (bool): If True, blank out all taxonomy columns, since
+            none of them could be resolved reliably.
+
+    Returns:
+        object: Single line dataframe with the selected top hit
+    """
+    fasta_order = return_value["fasta_order"]
+    # columns to return
+    return_value = return_value[
+        [
+            "id",
+            "phylum",
+            "class",
+            "order",
+            "family",
+            "genus",
+            "species",
+            "pct_identity",
+            "status",
+        ]
+    ]
+
+    if blank_taxonomy:
+        # used for the phylum-floor fallback: the top row's raw taxonomy is not
+        # trustworthy here (that's *why* we fell through to this branch), so
+        # report the query as unclassified rather than showing a misleading value
+        levels = ["phylum", "class", "order", "family", "genus", "species"]
+        return_value[levels] = pd.NA
+
+    # fill the missing data with correct types
+    data_to_type = {
+        "records": 0,
+        "selected_level": pd.NA,
+        "BIN": pd.NA,
+        "flags": "||||",
+    }
+    for key, value in data_to_type.items():
+        return_value[key] = value
+
+    # add the fasta order back in
+    return_value["fasta_order"] = fasta_order
+
+    return_value = return_value.astype(
+        {
+            "selected_level": "string[python]",
+            "BIN": "string[python]",
+            "flags": "string[python]",
+        }
+    )
+
+    return return_value
+
+
 def find_top_hit(hits_for_id: object, thresholds: list) -> object:
     """Funtion to find the top hit for a given ID.
 
@@ -194,45 +259,9 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
 
     # if a nomatch is found, a no-match can directly be retured
     if level == "no-match":
-        return_value = hits_for_id.query("species == 'no-match'").head(1)
-        fasta_order = return_value["fasta_order"]
-        # columns to return
-        return_value = return_value[
-            [
-                "id",
-                "phylum",
-                "class",
-                "order",
-                "family",
-                "genus",
-                "species",
-                "pct_identity",
-                "status",
-            ]
-        ]
-
-        # fill the missing data with correct types
-        data_to_type = {
-            "records": 0,
-            "selected_level": pd.NA,
-            "BIN": pd.NA,
-            "flags": "||||",
-        }
-        for key, value in data_to_type.items():
-            return_value[key] = value
-
-        # add the fasta order back in
-        return_value["fasta_order"] = fasta_order
-
-        return_value = return_value.astype(
-            {
-                "selected_level": "string[python]",
-                "BIN": "string[python]",
-                "flags": "string[python]",
-            }
+        return build_unresolved_result(
+            hits_for_id.query("species == 'no-match'").head(1)
         )
-
-        return return_value
 
     # go through the hits to make the selection
     while True:
@@ -263,6 +292,19 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
 
         # if there's nothing left, move the threshold up and continue to search
         if len(hits_above_similarity.index) == 0:
+            # thresholds[-1] (phylum) is a *virtual* floor: get_threshold() routes
+            # any hit weaker than the class threshold into "phylum" no matter how
+            # low its pct_identity actually is, or even if phylum itself is NA for
+            # every hit. That means this branch can still come up empty here -
+            # either the pct_identity filter above dropped every row, or the
+            # groupby/dropna on the phylum column did. Since phylum is already the
+            # last rung of `thresholds`, move_threshold_up() has nothing left to
+            # move to and would raise IndexError - so bail out to an unresolved
+            # result instead of looping further.
+            if threshold == thresholds[-1]:
+                return build_unresolved_result(
+                    hits_for_id.head(1), blank_taxonomy=True
+                )
             threshold, level = move_threshold_up(threshold, thresholds)
             continue
 

@@ -1,1 +1,29 @@
 /boldigger3/database/
+
+# byte-compiled / cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# build / packaging artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# virtual environments
+.venv/
+venv/
+env/
+
+# editors / IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# coverage
+.coverage
+htmlcov/
