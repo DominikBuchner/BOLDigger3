@@ -4,6 +4,8 @@ from boldigger3 import add_metadata
 from boldigger3 import select_top_hit
 from boldigger3 import download_database
 from importlib.metadata import version
+from pathlib import Path
+from boldigger3.query_cover import percentage, positive_bp, validate_cache
 
 
 # main function to program the commandline interface
@@ -67,6 +69,15 @@ def main() -> None:
         help="Thresholds to use for the selection of the top hit.",
     )
 
+    parser_identify.add_argument(
+        "--min-query-cover", type=percentage, default=None,
+        help="Minimum BOLD qcovhsp percentage (0-100) for local classification; omitted disables filtering.",
+    )
+    parser_identify.add_argument(
+        "--min-overlap-bp", type=positive_bp, default=100,
+        help="BOLD request minimum overlap (mo) in base pairs (default: 100); separate from query coverage.",
+    )
+
     # add the database download parse
     parser_download = subparsers.add_parser(
         "download_db", help="Download the public database."
@@ -109,6 +120,17 @@ def main() -> None:
 
     # run the identification engine
     if arguments.function == "identify":
+        try:
+            validate_cache(arguments.fasta_file, arguments.min_query_cover, arguments.min_overlap_bp)
+            # Metadata may already have been materialized by an earlier run.
+            cache = Path(arguments.fasta_file).parent / "boldigger3_data" / (Path(arguments.fasta_file).stem + ".duckdb")
+            if cache.is_file():
+                with duckdb.connect(str(cache), read_only=True) as connection:
+                    has_final = ("final_results",) in connection.execute("SHOW TABLES").fetchall()
+                if has_final:
+                    validate_cache(arguments.fasta_file, arguments.min_query_cover, arguments.min_overlap_bp, "final_results")
+        except ValueError as error:
+            parser.error(str(error))
         for i in range(5):
             try:
                 thresholds.append(arguments.thresholds[i])
@@ -133,13 +155,16 @@ def main() -> None:
             arguments.fasta_file,
             database=arguments.db,
             operating_mode=arguments.mode,
+            min_overlap_bp=arguments.min_overlap_bp,
         )
 
         # add additional data via the metadata
         add_metadata.main(fasta_path=arguments.fasta_file, db_path=arguments.db_path)
 
         # select the top hit
-        select_top_hit.main(fasta_path=arguments.fasta_file, thresholds=thresholds)
+        select_top_hit.main(fasta_path=arguments.fasta_file, thresholds=thresholds,
+                            min_query_cover=arguments.min_query_cover,
+                            min_overlap_bp=arguments.min_overlap_bp)
 
     # run the database download
     if arguments.function == "download_db":

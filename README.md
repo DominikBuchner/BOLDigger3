@@ -62,6 +62,35 @@ To run the ```identify``` function, use the following command:
 
 `PATH_TO_DATABASE` is the path to the `.ddb` file downloaded in Step 1.
 
+
+### Optional query coverage and minimum overlap
+
+`--min-query-cover` is a percentage from 0 to 100, inclusive. BOLD's returned
+`qcovhsp` is retained as `query_cover`; this measures the percentage of the query
+covered by the returned alignment. For example:
+
+```sh
+boldigger3 identify queries.fasta bold.ddb --db 3 --mode 3 --min-query-cover 90
+```
+
+Only hits with valid coverage at or above the threshold enter the existing
+taxonomic-identification algorithm. Rejected hits remain in the all-hits Excel
+files with `query_cover` and `passes_query_cover_filter`. Missing or invalid
+coverage fails an active filter. If every candidate fails, the final result has
+status `unresolved`, empty taxonomy and reason `no_hit_above_min_query_cover`.
+A genuine BOLD no-match remains a no-match. Without this option, classification
+uses the original candidate set and algorithm.
+
+`--min-overlap-bp` separately controls BOLD's request-side `mo` parameter in
+**base pairs** (positive integer, default 100). It does not set a coverage
+percentage; it can be combined with `--min-query-cover`, for example
+`--min-overlap-bp 128 --min-query-cover 90`.
+
+Old caches without query coverage require a fresh output directory/FASTA name
+when enabling the filter. A changed overlap also requires a fresh run. Changing
+only the local coverage threshold can reuse coverage-aware caches, but replaces
+that run's exports; copy the run directory first to preserve comparisons.
+
 # Databases
 
 The ```--db``` is a number between 1 and 8 corresponding to the eight databases BOLD v5 currently offers:

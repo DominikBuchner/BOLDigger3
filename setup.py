@@ -26,6 +26,7 @@ setuptools.setup(
         "python_dateutil>=2.9.0",
         "Requests>=2.32.3",
         "requests_html>=0.10.0",
+        "lxml_html_clean>=0.4.0",
         "setuptools>=65.5.0",
         "tqdm>=4.66.4",
         "urllib3>=1.26.14",

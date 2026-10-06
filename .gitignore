@@ -27,3 +27,25 @@ Thumbs.db
 # coverage
 .coverage
 htmlcov/
+
+# Local credentials, query inputs and generated identification data
+.env
+.env.*
+client_secret.json
+token.json
+*.fas
+*.fasta
+*.fa
+*.fna
+*.fastq
+*.jsonl
+*.pkl
+*.pickle
+*.xlsx
+*.csv
+*.ddb
+*.duckdb
+*.parquet*
+*.snappy
+*.log
+boldigger3_data/
