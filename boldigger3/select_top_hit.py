@@ -5,6 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from boldigger3.id_engine import parse_fasta
 from string import punctuation, digits
+from boldigger3.query_cover import annotate_hits, validate_cache
 
 
 def clean_dataframe(dataframe: object) -> object:
@@ -69,7 +70,7 @@ def clean_dataframe(dataframe: object) -> object:
     return dataframe
 
 
-def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name):
+def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name, min_query_cover=None):
     # chunk the fasta dicts keys to retrieve from duckdb
     chunks = enumerate(more_itertools.chunked(fasta_dict.keys(), n=8_000), start=1)
 
@@ -84,6 +85,7 @@ def stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta
             ORDER BY fasta_order ASC, pct_identity DESC"""
             chunk_data = connection.execute(query, [chunk]).df()
             chunk_data = clean_dataframe(chunk_data)
+            chunk_data = annotate_hits(chunk_data, min_query_cover)
 
             # drop the fasta order just before saving
             chunk_data = chunk_data.drop("fasta_order", axis=1)
@@ -391,8 +393,34 @@ def find_top_hit(hits_for_id: object, thresholds: list) -> object:
     return final_top_hit
 
 
+def classify_hits(hits, thresholds, min_query_cover=None):
+    """Hard-filter before any threshold, vote, flag, representative or BIN logic."""
+    if min_query_cover is None:
+        return find_top_hit(hits, thresholds)
+    annotated = annotate_hits(hits, min_query_cover)
+    candidates = annotated.loc[annotated["passes_query_cover_filter"]].copy()
+    no_match = hits["species"].eq("no-match").fillna(False).all()
+    if candidates.empty and not no_match:
+        result = build_unresolved_result(hits.head(1).copy(), blank_taxonomy=True)
+        result["pct_identity"] = float("nan")
+        result["status"] = "unresolved"
+        result["records_ratio"] = float("nan")
+        reason = "no_hit_above_min_query_cover"
+    elif no_match:
+        result = find_top_hit(hits, thresholds)
+        reason = "no_match"
+    else:
+        result = find_top_hit(candidates, thresholds)
+        reason = "classified" if result["selected_level"].notna().any() else "unresolved"
+    result["min_query_cover"] = float(min_query_cover)
+    result["query_cover_filter_status"] = reason
+    result["query_cover_hits_total"] = 0 if no_match else len(hits)
+    result["query_cover_hits_passed"] = 0 if no_match else len(candidates)
+    return result
+
+
 def gather_top_hits(
-    fasta_dict, id_engine_db_path, project_directory, fasta_name, thresholds
+    fasta_dict, id_engine_db_path, project_directory, fasta_name, thresholds, min_query_cover=None
 ):
     # store top hits here until n are reached, flush to parquet inbetween
     top_hits_buffer = []
@@ -401,10 +429,10 @@ def gather_top_hits(
     with duckdb.connect(id_engine_db_path) as connection:
         # extract the data per query from duckdb
         for query in tqdm(fasta_dict.keys(), desc="Top hit calculation"):
-            sql_query = f"SELECT * FROM final_results WHERE id='{query}' ORDER BY fasta_order ASC, pct_identity DESC"
-            query = clean_dataframe(connection.execute(sql_query).df())
+            sql_query = "SELECT * FROM final_results WHERE id=? ORDER BY fasta_order ASC, pct_identity DESC"
+            query = clean_dataframe(connection.execute(sql_query, [query]).df())
             # find the top hit
-            top_hits_buffer.append(find_top_hit(query, thresholds))
+            top_hits_buffer.append(classify_hits(query, thresholds, min_query_cover))
             # spill to parquet whenever there are 1k hits in the buffer, ingest parquet later for saving
             if len(top_hits_buffer) >= 1_000:
                 parquet_output = project_directory.joinpath(
@@ -463,7 +491,8 @@ def save_results(project_directory, fasta_name):
             file.unlink()
 
 
-def main(fasta_path: str, thresholds: list):
+def main(fasta_path: str, thresholds: list, min_query_cover=None, min_overlap_bp=100):
+    validate_cache(fasta_path, min_query_cover, min_overlap_bp, "final_results")
     tqdm.write(
         f"{datetime.datetime.now().strftime('%H:%M:%S')}: Removing digits and punctuation from hits."
     )
@@ -481,12 +510,12 @@ def main(fasta_path: str, thresholds: list):
     )
 
     # # stream the data from duckdb to excel first
-    stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name)
+    stream_hits_to_excel(id_engine_db_path, project_directory, fasta_dict, fasta_name, min_query_cover)
 
     tqdm.write(f"{datetime.datetime.now().strftime('%H:%M:%S')}: Calculating top hits.")
 
     gather_top_hits(
-        fasta_dict, id_engine_db_path, project_directory, fasta_name, thresholds
+        fasta_dict, id_engine_db_path, project_directory, fasta_name, thresholds, min_query_cover
     )
     tqdm.write(
         f"{datetime.datetime.now().strftime('%H:%M:%S')}: Saving results. This may take a while."

@@ -9,6 +9,7 @@ from urllib3.util.retry import Retry
 from boldigger3.exceptions import DownloadFinished
 from json.decoder import JSONDecodeError
 from requests.exceptions import ReadTimeout
+from boldigger3.query_cover import ALIGNMENT_FIELDS, positive_bp
 
 
 class BoldIdRequest:
@@ -146,7 +147,7 @@ def already_downloaded(fasta_dict: dict, database_path: Path) -> dict:
         return fasta_dict
 
 
-def build_url_params(database: int, operating_mode: int) -> tuple:
+def build_url_params(database: int, operating_mode: int, min_overlap_bp: int = 100) -> tuple:
     """Function that generates a base URL and the params for the POST request to the ID engine.
 
     Args:
@@ -180,7 +181,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
     params = {
         "db": idx_to_database[database],
         "mi": idx_to_operating_mode[operating_mode]["mi"],
-        "mo": 100,
+        "mo": positive_bp(min_overlap_bp),
         "maxh": idx_to_operating_mode[operating_mode]["maxh"],
         "order": 3,
     }
@@ -191,7 +192,7 @@ def build_url_params(database: int, operating_mode: int) -> tuple:
     return base_url, params
 
 
-def build_download_queue(fasta_dict: dict, database: int, operating_mode: int) -> dict:
+def build_download_queue(fasta_dict: dict, database: int, operating_mode: int, min_overlap_bp: int = 100) -> dict:
     """Function to build the download queue.
 
     Args:
@@ -208,7 +209,7 @@ def build_download_queue(fasta_dict: dict, database: int, operating_mode: int) -
     download_queue = {"waiting": OrderedDict(), "active": dict()}
 
     # build the base url and the params
-    base_url, params = build_url_params(database, operating_mode)
+    base_url, params = build_url_params(database, operating_mode, min_overlap_bp)
 
     # determine the query size from the params
     query_size_dict = {0.94: 100, 0.9: 20, 0.75: 10}
@@ -390,12 +391,13 @@ def parse_and_save_data(
 
             taxonomy = record_data.get("taxonomy", {})
             row.update(taxonomy)
+            row.update({column: record_data.get(field) for column, field in ALIGNMENT_FIELDS.items()})
             rows.append(row)
 
     # transform to dataframe, drop unused labels, add ordering column, use correct type annotations
     id_engine_result = pd.DataFrame(rows)
     id_engine_result = id_engine_result.drop(
-        labels=["subfamily", "taxid_count"], axis=1
+        labels=["subfamily", "taxid_count"], axis=1, errors="ignore"
     )
     id_engine_result["pct_identity"] = id_engine_result["pct_identity"].astype(
         "float64"
@@ -404,6 +406,11 @@ def parse_and_save_data(
     id_engine_result["database"] = BoldIdRequest.database
     id_engine_result["operating_mode"] = BoldIdRequest.operating_mode
     id_engine_result["fasta_order"] = id_engine_result["id"].map(fasta_order)
+    for column in ALIGNMENT_FIELDS:
+        if column not in id_engine_result:
+            id_engine_result[column] = float("nan")
+        id_engine_result[column] = pd.to_numeric(id_engine_result[column], errors="coerce").astype("float64")
+    id_engine_result["min_overlap_bp"] = BoldIdRequest.params.get("mo", 100)
 
     # reorder the columns
     id_engine_result = id_engine_result[
@@ -423,6 +430,8 @@ def parse_and_save_data(
             "operating_mode",
             "status",
             "fasta_order",
+            *ALIGNMENT_FIELDS,
+            "min_overlap_bp",
         ]
     ]
 
@@ -525,9 +534,13 @@ def parquet_to_duckdb(project_directory, database_path):
             """
             )
         else:
+            # Resume legacy no-filter caches without dropping old hits or misaligning columns.
+            for column in ALIGNMENT_FIELDS:
+                database.execute(f'ALTER TABLE id_engine_results ADD COLUMN IF NOT EXISTS "{column}" DOUBLE')
+            database.execute("ALTER TABLE id_engine_results ADD COLUMN IF NOT EXISTS min_overlap_bp INTEGER DEFAULT 100")
             database.execute(
                 f"""
-            INSERT INTO id_engine_results
+            INSERT INTO id_engine_results BY NAME
             SELECT * FROM read_parquet('{parquet_path}')
             """
             )
@@ -541,7 +554,7 @@ def parquet_to_duckdb(project_directory, database_path):
             file.unlink()
 
 
-def main(fasta_path: str, database: int, operating_mode: int) -> None:
+def main(fasta_path: str, database: int, operating_mode: int, min_overlap_bp: int = 100) -> None:
     """Main function to run the BOLD identification engine.
 
     Args:
@@ -588,6 +601,9 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
     try:
         with open(download_queue_name, "rb") as download_queue_file:
             download_queue = pickle.load(download_queue_file)
+            for queue in (download_queue["waiting"], download_queue["active"]):
+                if any(request.params.get("mo", 100) != min_overlap_bp for request in queue.values()):
+                    raise ValueError("Pending requests use a different minimum overlap; use a fresh output directory.")
             # user output
             tqdm.write(
                 "{}: Found unfinished downloads from previous runs. Continueing download.".format(
@@ -602,7 +618,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
             )
         )
         # build the queue
-        download_queue = build_download_queue(fasta_dict, database, operating_mode)
+        download_queue = build_download_queue(fasta_dict, database, operating_mode, min_overlap_bp)
         with open(download_queue_name, "wb") as download_queue_file:
             pickle.dump(download_queue, download_queue_file)
         tqdm.write(
@@ -671,7 +687,7 @@ def main(fasta_path: str, database: int, operating_mode: int) -> None:
                         )
                     )
                     download_queue = build_download_queue(
-                        fasta_dict, database, operating_mode
+                        fasta_dict, database, operating_mode, min_overlap_bp
                     )
                     # recalculate the total downloads
                     total_downloads = len(download_queue["active"]) + len(
